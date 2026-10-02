@@ -188,7 +188,7 @@ function Write-MtrBanner {
         Title card at the start of an execution:
 
           ╭──────────────────────────────────────────────────────────────────────────────╮
-          │  📮  Message Trace Report                          v1.0.0 · Nicolas Fabert   │
+          │  📮  Message Trace Report                          v1.1.0 · Nicolas Fabert   │
           │     Exchange Online message trace · Microsoft Graph · SQLite history         │
           ╰──────────────────────────────────────────────────────────────────────────────╯
              🎯  Mode        Trace

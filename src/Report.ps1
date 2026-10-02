@@ -2,7 +2,8 @@
     Message Trace Report - report.
 
     Select-MtrMessages  applies the FULL user filter to the database for the period (temp table in the engine)
-    New-MtrReport       writes the files of the selection (CSV, JSON, HTML) in one pass
+    New-MtrReport       writes the files of the selection (CSV, JSON, HTML) in one pass, with the route
+                        of the deliveries read (Routes CSV, Reason columns, HTML dialog)
     New-MtrRunDirectory reports\<date>_<time>_<mode>, never overwritten
 #>
 
@@ -56,6 +57,8 @@ function New-MtrReport {
     $q.Deliveries = $r.Files -contains 'Deliveries'
     $q.Senders = $r.Files -contains 'Senders'
     $q.Recipients = $r.Files -contains 'Recipients'
+    $q.Routes = $r.Files -contains 'Routes'
+    $q.DetailsRequested = [bool]$Settings.Details.Enabled
     $q.CountsPerDay = $r.CountsPerDay -and ($Period.EndMs - $Period.StartMs) -gt 86400000
     $q.MaxRowsPerFile = $r.MaxRowsPerFile
     $q.HtmlMaxMessages = $r.HtmlMaxMessages

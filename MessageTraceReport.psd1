@@ -8,7 +8,7 @@
 #
 @{
     RootModule        = 'MessageTraceReport.psm1'
-    ModuleVersion     = '1.0.0'
+    ModuleVersion     = '1.1.0'
     GUID              = '6c1f3b2a-8d4e-4f7a-9b5c-2e7d1a0f4c83'
     Author            = 'Nicolas Fabert'
     Description       = 'Message Trace Report: Exchange Online message trace through the Microsoft Graph API (v1.0), with a local SQLite history, a query planner that respects the API quota, and CSV / JSON / HTML reports.'
@@ -23,6 +23,7 @@
         'Resolve-MtrPeriod', 'ConvertTo-MtrUnixMs', 'Read-MtrAddressFile', 'New-MtrFilter', 'Get-MtrQueryPlan', 'Get-MtrWorkPlan', 'Get-MtrEarliestMs'
         'Connect-MtrGraph', 'Update-MtrToken', 'Get-MtrCertificate', 'New-MtrClientAssertion', 'Get-MtrTokenClaims'
         'Invoke-MtrCollection', 'Invoke-MtrDetails', 'Select-MtrMessages', 'New-MtrReport', 'New-MtrRunDirectory'
+        'Write-MtrJourney', 'Write-MtrReasons'
         'Show-MtrStatus', 'Invoke-MtrRetention', 'Enter-MtrLock', 'Exit-MtrLock'
     )
     CmdletsToExport   = @()

@@ -2,7 +2,7 @@
 //  Message Trace Report - engine, part 5: report files
 // -----------------------------------------------------------------------------
 //  Author  : Nicolas Fabert
-//  Version : 1.0.0
+//  Version : 1.1.0
 //
 //  One pass over the selection (newest message first, the deliveries of a message
 //  consecutive) writes every file at once:
@@ -43,16 +43,29 @@ namespace MessageTraceReport
         public double CoveragePercent = 100;
         public string CoverageNote = "";
         public Dictionary<string, List<DetailRow>> Details = new Dictionary<string, List<DetailRow>>();
+        public bool Routes = true;              // MessageTrace_Routes.csv (one row per step of the routes read)
+        public bool DetailsRequested;           // -IncludeDetails was used (the page explains how to read routes otherwise)
     }
 
     public sealed class ReportFile { public string Path, Kind, Name; public long Rows, Bytes; }
+
+    /// <summary>A reason why deliveries did not end normally, with how many deliveries and messages it explains.</summary>
+    public sealed class ReasonCount
+    {
+        public string Reason = "", Component = "", Severity = "", DocTitle = "", DocUrl = "", Example = "", Cause = "", CauseId = "", Tone = "danger", Help = "";
+        public long Deliveries, Messages;
+        internal long LastMessage = long.MinValue;
+    }
 
     public sealed class ReportResult
     {
         public List<ReportFile> Files = new List<ReportFile>();
         public long Messages, Deliveries, Senders, Recipients, HtmlMessages, TotalBytes;
+        public long RoutesRead, ProblemDeliveries, ProblemRoutesRead;
         public bool HtmlTruncated;
         public SortedDictionary<string, long> Statuses = new SortedDictionary<string, long>(StringComparer.Ordinal);
+        public List<ReasonCount> Reasons = new List<ReasonCount>();   // per status code, text and component
+        public List<ReasonCount> Causes = new List<ReasonCount>();    // per cause (Blocked by DLP, Recipient not found ...)
     }
 
     sealed class Counter { public long Messages, Deliveries, Delivered, Failed, Other, LastMs; }
@@ -182,18 +195,23 @@ namespace MessageTraceReport
             var timeline = new SortedDictionary<string, long[]>(StringComparer.Ordinal);   // bucket -> messages, failed
             bool hourly = q.EndMs - q.StartMs <= 2 * 86400000L;
             string tz = q.TimeZoneLabel;
-            CsvOut mCsv = null, dCsv = null;
+            CsvOut mCsv = null, dCsv = null, rCsv = null;
             JsonOut mJson = null, dJson = null;
             HtmlOut html = null;
+            var reasons = new Dictionary<string, ReasonCount>(StringComparer.Ordinal);
+            var causes = new Dictionary<string, ReasonCount>(StringComparer.Ordinal);
             try
             {
-                if (q.Csv && q.Messages) mCsv = new CsvOut(q, "Messages", new[] { "Received (" + tz + ")", "Sender", "Recipients", "Recipient count", "Status", "Subject", "Size (bytes)", "Message ID", "From IP", "Message trace ID" });
-                if (q.Csv && q.Deliveries) dCsv = new CsvOut(q, "Deliveries", new[] { "Received (" + tz + ")", "Sender", "Recipient", "Status", "Subject", "Size (bytes)", "Message ID", "From IP", "To IP", "Message trace ID" });
+                if (q.Csv && q.Messages) mCsv = new CsvOut(q, "Messages", new[] { "Received (" + tz + ")", "Sender", "Recipients", "Recipient count", "Status", "Subject", "Size (bytes)", "Message ID", "From IP", "Message trace ID", "Cause", "Reason" });
+                if (q.Csv && q.Deliveries) dCsv = new CsvOut(q, "Deliveries", new[] { "Received (" + tz + ")", "Sender", "Recipient", "Status", "Subject", "Size (bytes)", "Message ID", "From IP", "To IP", "Message trace ID", "Route", "Cause", "Reason" });
+                if (q.Csv && q.Routes && q.Details != null && q.Details.Count > 0)
+                    rCsv = new CsvOut(q, "Routes", new[] { "Received (" + tz + ")", "Sender", "Recipient", "Status", "Cause", "Subject", "Step", "Time (" + tz + ")", "Elapsed (s)", "Event", "Action", "Detail", "Status code", "Reason", "Component", "Remote server", "Facts", "Message ID", "Message trace ID" });
                 if (q.Json && q.Messages) mJson = new JsonOut(q, "Messages");
                 if (q.Json && q.Deliveries) dJson = new JsonOut(q, "Deliveries");
                 if (q.Html) html = new HtmlOut(q);
 
                 var current = new List<DeliveryView>();
+                var routes = new List<RouteInfo>();
                 Action flush = () =>
                 {
                     if (current.Count == 0) return;
@@ -206,12 +224,57 @@ namespace MessageTraceReport
                     result.Messages++;
                     result.Deliveries += current.Count;
                     bool anyFailed = false;
+                    string messageReason = "", messageCause = "";
+                    int messageReasonRank = int.MaxValue;
+                    routes.Clear();
                     foreach (DeliveryView d in current)
                     {
+                        List<DetailRow> events;
+                        RouteInfo route = null;
+                        if (q.Details != null && q.Details.Count > 0 && q.Details.TryGetValue(DetailKey(d), out events) && events.Count > 0) route = RouteAnalyzer.Analyze(events);
+                        routes.Add(route);
+                    }
+                    for (int i = 0; i < current.Count; i++)
+                    {
+                        DeliveryView d = current[i];
+                        RouteInfo route = routes[i];
                         string label = StatusLabel(d.Status);
                         long n; result.Statuses.TryGetValue(label, out n); result.Statuses[label] = n + 1;
                         if (IsFailed(d.Status)) anyFailed = true;
-                        if (dCsv != null) dCsv.Add(local, d.Sender, d.Recipient, label, d.Subject, d.Size.ToString(CultureInfo.InvariantCulture), d.MessageId, d.FromIP, d.ToIP, d.TraceId);
+                        bool problem = !IsDelivered(d.Status);
+                        string explain = RouteAnalyzer.Explain(route);
+                        CauseInfo cause = route != null ? route.Cause : null;
+                        string causeText = cause != null ? cause.Text : "";
+                        if (route != null) result.RoutesRead++;
+                        if (problem)
+                        {
+                            result.ProblemDeliveries++;
+                            if (route != null) result.ProblemRoutesRead++;
+                        }
+                        if (cause != null)
+                        {
+                            // The cause of the message: a failure first, then a delay, then anything else.
+                            int rank = IsFailed(d.Status) ? 0 : problem ? 1 : 2;
+                            if (rank < messageReasonRank) { messageReason = explain; messageCause = causeText; messageReasonRank = rank; }
+                            string key = cause.Id + "|" + cause.Rule + "|" + RouteAnalyzer.ExplainKey(route);
+                            ReasonCount rc0;
+                            if (!reasons.TryGetValue(key, out rc0))
+                            {
+                                ReasonInfo r = route.Reason != null && route.Reason.Code.Length > 0 && route.Reason.Code[0] != '2' ? route.Reason : null;
+                                rc0 = new ReasonCount { Reason = explain.Length > 0 ? (r != null ? r.Short : explain) : route.Outcome, Component = r != null ? r.Component : RouteAnalyzer.Verdict(route).Length > 0 ? "Anti-spam" : "",
+                                    Severity = r != null ? r.Severity : "", DocTitle = r != null ? r.DocTitle : "", DocUrl = r != null ? r.DocUrl : "", Example = d.Recipient,
+                                    Cause = causeText, CauseId = cause.Id, Tone = cause.Tone, Help = cause.Help };
+                                reasons[key] = rc0;
+                            }
+                            rc0.Deliveries++;
+                            if (rc0.LastMessage != d.MessageRowId) { rc0.Messages++; rc0.LastMessage = d.MessageRowId; }
+                            ReasonCount cc;
+                            if (!causes.TryGetValue(cause.Label, out cc)) { cc = new ReasonCount { Cause = cause.Label, CauseId = cause.Id, Tone = cause.Tone, Help = cause.Help, Example = d.Recipient }; causes[cause.Label] = cc; }
+                            cc.Deliveries++;
+                            if (cc.LastMessage != d.MessageRowId) { cc.Messages++; cc.LastMessage = d.MessageRowId; }
+                        }
+                        if (dCsv != null) dCsv.Add(local, d.Sender, d.Recipient, label, d.Subject, d.Size.ToString(CultureInfo.InvariantCulture), d.MessageId, d.FromIP, d.ToIP, d.TraceId, route != null ? route.Summary : "", causeText, explain);
+                        if (rCsv != null && route != null) WriteRouteRows(rCsv, q, local, d, label, route);
                         if (dJson != null)
                         {
                             Utf8JsonWriter w = dJson.Writer;
@@ -220,6 +283,21 @@ namespace MessageTraceReport
                             w.WriteString("receivedDateTime", Time.Iso(d.ReceivedMs)); w.WriteString("recipientAddress", d.Recipient);
                             w.WriteString("senderAddress", d.Sender); w.WriteString("subject", d.Subject); w.WriteNumber("size", d.Size);
                             w.WriteString("fromIP", d.FromIP); w.WriteString("toIP", d.ToIP);
+                            if (route != null)
+                            {
+                                w.WriteString("route", route.Summary); w.WriteString("outcome", route.Outcome);
+                                if (cause != null) { w.WriteString("causeId", cause.Id); w.WriteString("cause", causeText); }
+                                w.WriteString("reason", explain);
+                                w.WriteStartArray("events");
+                                foreach (RouteEvent e in route.Events)
+                                {
+                                    w.WriteStartObject();
+                                    w.WriteString("dateTime", Time.Iso(e.TimeMs)); w.WriteString("event", e.Event); w.WriteString("action", e.Action);
+                                    w.WriteString("description", e.Description); w.WriteString("data", e.Data);
+                                    w.WriteEndObject();
+                                }
+                                w.WriteEndArray();
+                            }
                             w.WriteEndObject();
                         }
                         // Per recipient (and day).
@@ -242,7 +320,7 @@ namespace MessageTraceReport
                     tl[0]++; if (anyFailed) tl[1]++;
 
                     string recipientList = string.Join("; ", current.Select(d => d.Recipient));
-                    if (mCsv != null) mCsv.Add(local, m.Sender, recipientList, current.Count.ToString(CultureInfo.InvariantCulture), summary, m.Subject, size.ToString(CultureInfo.InvariantCulture), m.MessageId, m.FromIP, m.TraceId);
+                    if (mCsv != null) mCsv.Add(local, m.Sender, recipientList, current.Count.ToString(CultureInfo.InvariantCulture), summary, m.Subject, size.ToString(CultureInfo.InvariantCulture), m.MessageId, m.FromIP, m.TraceId, messageCause, messageReason);
                     if (mJson != null)
                     {
                         Utf8JsonWriter w = mJson.Writer;
@@ -251,12 +329,25 @@ namespace MessageTraceReport
                         w.WriteString("received", local); w.WriteString("senderAddress", m.Sender); w.WriteString("subject", m.Subject);
                         w.WriteNumber("size", size); w.WriteString("fromIP", m.FromIP); w.WriteString("status", summary);
                         w.WriteNumber("recipientCount", current.Count);
+                        if (messageReason.Length > 0) w.WriteString("reason", messageReason);
+                        if (messageCause.Length > 0) w.WriteString("cause", messageCause);
                         w.WriteStartArray("recipients");
-                        foreach (DeliveryView d in current) { w.WriteStartObject(); w.WriteString("recipientAddress", d.Recipient); w.WriteString("status", d.Status); w.WriteString("toIP", d.ToIP); w.WriteNumber("size", d.Size); w.WriteEndObject(); }
+                        for (int i = 0; i < current.Count; i++)
+                        {
+                            DeliveryView d = current[i];
+                            w.WriteStartObject(); w.WriteString("recipientAddress", d.Recipient); w.WriteString("status", d.Status); w.WriteString("toIP", d.ToIP); w.WriteNumber("size", d.Size);
+                            if (routes[i] != null)
+                            {
+                                w.WriteString("route", routes[i].Summary);
+                                if (routes[i].Cause != null) w.WriteString("cause", routes[i].Cause.Text);
+                                w.WriteString("reason", RouteAnalyzer.Explain(routes[i]));
+                            }
+                            w.WriteEndObject();
+                        }
                         w.WriteEndArray();
                         w.WriteEndObject();
                     }
-                    if (html != null) html.Add(current, size);
+                    if (html != null) html.Add(current, routes, size);
                     current.Clear();
                 };
 
@@ -275,6 +366,9 @@ namespace MessageTraceReport
                 result.Files.AddRange(counterFiles);
                 result.Senders = topSenders.Count;
                 result.Recipients = topRecipients.Count;
+                result.Reasons = reasons.Values.OrderByDescending(r => r.Deliveries).ThenByDescending(r => r.Messages).ThenBy(r => r.Reason, StringComparer.OrdinalIgnoreCase).ToList();
+                result.Causes = causes.Values.OrderByDescending(r => r.Deliveries).ThenByDescending(r => r.Messages).ThenBy(r => r.Cause, StringComparer.OrdinalIgnoreCase).ToList();
+                if (rCsv != null) rCsv.Dispose();
 
                 if (html != null)
                 {
@@ -290,7 +384,11 @@ namespace MessageTraceReport
                         { "topRecipients", topRecipients.OrderByDescending(p => p.Value).ThenBy(p => p.Key, StringComparer.OrdinalIgnoreCase).Take(10).Select(p => new object[] { p.Key, p.Value }).ToList() },
                         { "timeline", timeline.Select(p => new object[] { p.Key, p.Value[0], p.Value[1] }).ToList() }, { "hourly", hourly },
                         { "coveragePercent", Math.Round(q.CoveragePercent, 2) }, { "coverageNote", q.CoverageNote },
-                        { "csvFiles", (mCsv != null ? mCsv.Files : new List<ReportFile>()).Concat(dCsv != null ? dCsv.Files : new List<ReportFile>()).Concat(counterFiles).Select(f => Path.GetFileName(f.Path)).ToList() }
+                        { "routes", result.RoutesRead }, { "problemDeliveries", result.ProblemDeliveries }, { "problemRoutes", result.ProblemRoutesRead },
+                        { "detailsRequested", q.DetailsRequested },
+                        { "reasons", result.Reasons.Take(15).Select(r => new object[] { r.Reason, r.Component, r.Severity, r.DocTitle, r.DocUrl, r.Deliveries, r.Messages, r.Example, r.Cause, r.Tone }).ToList() },
+                        { "causes", result.Causes.Select(r => new object[] { r.Cause, r.Tone, r.Deliveries, r.Messages, r.Help, r.CauseId }).ToList() },
+                        { "csvFiles", (mCsv != null ? mCsv.Files : new List<ReportFile>()).Concat(dCsv != null ? dCsv.Files : new List<ReportFile>()).Concat(rCsv != null ? rCsv.Files : new List<ReportFile>()).Concat(counterFiles).Select(f => Path.GetFileName(f.Path)).ToList() }
                     };
                     html.Close(meta);
                     result.HtmlMessages = html.Rows;
@@ -301,6 +399,7 @@ namespace MessageTraceReport
             {
                 if (mCsv != null) mCsv.Dispose();
                 if (dCsv != null) dCsv.Dispose();
+                if (rCsv != null) rCsv.Dispose();
                 if (mJson != null) mJson.Dispose();
                 if (dJson != null) dJson.Dispose();
                 if (html != null) html.Dispose();
@@ -308,6 +407,7 @@ namespace MessageTraceReport
             var files = new List<ReportFile>();
             if (mCsv != null) files.AddRange(mCsv.Files);
             if (dCsv != null) files.AddRange(dCsv.Files);
+            if (rCsv != null) files.AddRange(rCsv.Files);
             files.AddRange(result.Files);   // senders, recipients
             if (mJson != null) files.Add(mJson.File);
             if (dJson != null) files.Add(dJson.File);
@@ -315,6 +415,27 @@ namespace MessageTraceReport
             result.Files = files;
             foreach (ReportFile f in result.Files) { if (f.Bytes == 0 && File.Exists(f.Path)) f.Bytes = new FileInfo(f.Path).Length; result.TotalBytes += f.Bytes; }
             return result;
+        }
+
+        static string DetailKey(DeliveryView d)
+        {
+            return d.MessageRowId.ToString(CultureInfo.InvariantCulture) + "|" + d.RecipientId.ToString(CultureInfo.InvariantCulture);
+        }
+
+        /// <summary>One row per step of a route (MessageTrace_Routes.csv).</summary>
+        static void WriteRouteRows(CsvOut csv, ReportRequest q, string received, DeliveryView d, string status, RouteInfo route)
+        {
+            int step = 0;
+            foreach (RouteEvent e in route.Events)
+            {
+                step++;
+                ReasonInfo r = e.Reason;
+                string facts = string.Join(" | ", e.Facts.Select(f => f.Key + "=" + f.Value));
+                csv.Add(received, d.Sender, d.Recipient, status, route.Cause != null ? route.Cause.Text : "", d.Subject, step.ToString(CultureInfo.InvariantCulture), Time.FormatLocal(e.TimeMs, q.Zone),
+                    ((e.TimeMs - route.FirstMs) / 1000.0).ToString("0.###", CultureInfo.InvariantCulture), e.Event, e.Action, e.Description,
+                    r != null ? (r.Smtp + " " + r.Code).Trim() : "", r != null ? r.Text : "", r != null ? r.Component : "",
+                    r != null ? string.Join(" ", new[] { r.RemoteHost, r.RemoteIp }.Where(x => !string.IsNullOrEmpty(x))) : "", facts, d.MessageId, d.TraceId);
+            }
         }
 
         static void WriteCounters(ReportRequest q, string name, string label, Dictionary<string, Counter> counters, bool isSender, List<ReportFile> files)
@@ -411,14 +532,14 @@ namespace MessageTraceReport
                 return i;
             }
 
-            public void Add(List<DeliveryView> deliveries, long size)
+            public void Add(List<DeliveryView> deliveries, List<RouteInfo> routes, long size)
             {
                 if (Rows >= _q.HtmlMaxMessages) { Truncated = true; return; }
                 DeliveryView m = deliveries[0];
                 int position = _t.Count;
                 Rows++;
                 // Local wall-clock seconds: the page formats them as UTC, so the browser's own time zone never changes what is shown.
-                _t.Add((m.ReceivedMs + (long)_q.Zone.GetUtcOffset(DateTimeOffset.FromUnixTimeMilliseconds(m.ReceivedMs)).TotalMilliseconds) / 1000);
+                _t.Add(LocalSeconds(m.ReceivedMs));
                 _s.Add(Index(_people, _newPeople, m.Sender));
                 _j.Add(Index(_subjects, _newSubjects, m.Subject));
                 _n.Add(deliveries.Count);
@@ -428,21 +549,45 @@ namespace MessageTraceReport
                 _id.Add(m.TraceId);
                 int kept = Math.Min(deliveries.Count, _q.HtmlRecipientsPerMessage);
                 _rl.Add(kept);
-                // Problems first, so that the recipients kept in the page include them.
-                IEnumerable<DeliveryView> order = deliveries.Count > kept ? deliveries.OrderBy(d => IsDelivered(d.Status) ? 1 : 0) : (IEnumerable<DeliveryView>)deliveries;
-                foreach (DeliveryView d in order.Take(kept))
+                // Problems first, then the routes read, so that the recipients kept in the page include them.
+                IEnumerable<int> order = Enumerable.Range(0, deliveries.Count);
+                if (deliveries.Count > kept) order = order.OrderBy(i => IsDelivered(deliveries[i].Status) ? 1 : 0).ThenBy(i => routes[i] != null ? 0 : 1);
+                foreach (int i in order.Take(kept))
                 {
+                    DeliveryView d = deliveries[i];
                     _ri.Add(Index(_people, _newPeople, d.Recipient));
                     _rs.Add(Index(_statuses, _newStatuses, StatusLabel(d.Status)));
-                    List<DetailRow> events;
-                    if (_q.Details != null && _q.Details.TryGetValue(d.MessageRowId.ToString(CultureInfo.InvariantCulture) + "|" + d.RecipientId.ToString(CultureInfo.InvariantCulture), out events))
-                    {
-                        _x.Add(new object[] { position, _people[d.Recipient ?? ""], events.Select(e => new object[] {
-                            (e.TimeMs + (long)_q.Zone.GetUtcOffset(DateTimeOffset.FromUnixTimeMilliseconds(e.TimeMs)).TotalMilliseconds) / 1000,
-                            e.Event, e.Action, e.Description, e.Data }).ToList() });
-                    }
+                    if (routes[i] != null) _x.Add(new object[] { position, _people[d.Recipient ?? ""], Encode(routes[i]) });
                 }
                 if (_t.Count >= _q.HtmlChunkRows) Flush();
+            }
+
+            long LocalSeconds(long ms)
+            {
+                return (ms + (long)_q.Zone.GetUtcOffset(DateTimeOffset.FromUnixTimeMilliseconds(ms)).TotalMilliseconds) / 1000;
+            }
+
+            // Route of one recipient: o outcome, m summary, g signature, w explanation, sv server, r reason, c cause, e events.
+            // Event: [time, event, action, description, kind, tone, help, folder, [label, value, ...], reason].
+            // Reason: [smtp, code, text, detail, severity, remote host, remote IP, remote message, component, Learn title, Learn URL].
+            // Cause: [id, label, tone, help, rule].
+            Dictionary<string, object> Encode(RouteInfo route)
+            {
+                return new Dictionary<string, object>
+                {
+                    { "o", route.Outcome }, { "m", route.Summary }, { "g", route.Signature }, { "w", RouteAnalyzer.Explain(route) }, { "sv", route.Server },
+                    { "r", EncodeReason(route.Reason) },
+                    { "c", route.Cause == null ? null : new[] { route.Cause.Id, route.Cause.Label, route.Cause.Tone, route.Cause.Help, route.Cause.Rule } },
+                    { "e", route.Events.Select(e => new object[] {
+                        LocalSeconds(e.TimeMs), e.Event, e.Action, e.Description, e.Kind, e.Tone, e.Help, e.Folder,
+                        e.Facts.SelectMany(f => new[] { f.Key, f.Value }).ToList(), EncodeReason(e.Reason) }).ToList() }
+                };
+            }
+
+            static object EncodeReason(ReasonInfo r)
+            {
+                if (r == null) return null;
+                return new[] { r.Smtp, r.Code, r.Text, r.Detail, r.Severity, r.RemoteHost, r.RemoteIp, r.RemoteMessage, r.Component, r.DocTitle, r.DocUrl };
             }
 
             void Flush()

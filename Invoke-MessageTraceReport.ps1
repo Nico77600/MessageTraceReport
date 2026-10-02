@@ -81,8 +81,14 @@
     Destination IP address (outbound messages).
 
 .PARAMETER IncludeDetails
-    Also reads the route of the deliveries (getDetailsByRecipient): failed / pending / quarantined first,
-    up to Details.MaxDeliveries. Shown in the HTML report. Overrides Details.Enabled.
+    Also reads the route of the deliveries (getDetailsByRecipient: Receive, Submit, Deliver, Fail, Defer ...
+    with the reason of each failure). A selection of at most Details.MaxDeliveries deliveries is read
+    completely; a larger one: for each message with a problem, one recipient per problem status and one
+    delivered recipient to compare with, then the other problems. Shown in the console (small selections),
+    in the HTML report and in the Routes CSV file. Overrides Details.Enabled.
+
+.PARAMETER MaxRoutes
+    Number of routes to read in this run (overrides Details.MaxDeliveries); implies -IncludeDetails.
 
 .PARAMETER Format
     Overrides Report.Formats: Csv, Html, Json.
@@ -122,6 +128,11 @@
     Messages from OR to these addresses, with the route of the failed ones, report opened at the end.
 
 .EXAMPLE
+    .\Invoke-MessageTraceReport.ps1 -MessageId '<abc123@contoso.com>' -Range Last10Days -IncludeDetails
+    Traces one message: the route of every recipient, grouped by identical route, with the reason of each
+    failure and where the routes of the failed and the delivered recipients split.
+
+.EXAMPLE
     .\Invoke-MessageTraceReport.ps1 -Mode Collect
     Scheduled task: collects the last days of the tenant into the database (incremental).
 
@@ -135,7 +146,7 @@
 
 .NOTES
     Author  : Nicolas Fabert
-    Version : 1.0.0
+    Version : 1.1.0
     Exit codes : 0 = success, 1 = failure, 2 = finished but incomplete (see the summary).
     Documentation : docs\MessageTraceReport-Guide.md (or .html)
 #>
@@ -165,6 +176,7 @@ param(
     [string]$ToIP,
 
     [switch]$IncludeDetails,
+    [ValidateRange(1, 10000)][int]$MaxRoutes,
     [ValidateSet('Csv', 'Html', 'Json')][string[]]$Format,
     [string]$OutputPath,
     [switch]$GridView,
@@ -193,6 +205,7 @@ try {
         if ($OutputPath) { $settings.Report.OutputPath = [IO.Path]::GetFullPath($OutputPath, (Get-Location).Path) }
         if ($Format) { $settings.Report.Formats = @($Format) }
         if ($PSBoundParameters.ContainsKey('IncludeDetails')) { $settings.Details.Enabled = [bool]$IncludeDetails }
+        if ($MaxRoutes) { $settings.Details.Enabled = $true; $settings.Details.MaxDeliveries = $MaxRoutes }
         $zone = $settings.Zone
         $dot = [char]0x00B7; $arrow = [char]0x2192
         $logPath = Start-MtrLog -Directory $settings.Logging.Path -RetentionDays $settings.Logging.RetentionDays
@@ -351,8 +364,12 @@ try {
         Write-MtrItem Info ("{0} messages {1} {2} deliveries match the filter" -f (Format-MtrNumber $selection.Messages), $dot, (Format-MtrNumber $selection.Deliveries)) -Icon Mail
 
         if ($settings.Details.Enabled -and $selection.Deliveries) {
-            $candidates = $store.GetDetailCandidates($settings.Details.MaxDeliveries, $settings.Details.OnlyProblems)
+            $d = $settings.Details
+            $candidates = $store.GetDetailCandidates($d.MaxDeliveries, $d.OnlyProblems, $d.CompareWithDelivered)
             if ($candidates.Count) {
+                $kinds = $candidates | Group-Object Kind -NoElement | Sort-Object { @{ Problem = 0; Comparison = 1; Delivered = 2 }[$_.Name] }
+                $kindText = ($kinds | ForEach-Object { '{0} {1}' -f $_.Count, @{ Problem = 'not delivered'; Comparison = 'delivered, to compare'; Delivered = 'delivered or expanded' }[$_.Name] }) -join " $dot "
+                Write-MtrItem Info ("Routes to read: {0} ({1})" -f $candidates.Count, $kindText) -Icon Route
                 if (-not $connection) {
                     $connection = Connect-MtrGraph -Settings $settings
                     Write-MtrItem Ok "$($connection.Account)  $dot tenant verified" -Icon Key
@@ -360,8 +377,14 @@ try {
                 $details = Invoke-MtrDetails -Store $store -Settings $settings -Connection $connection -Items $candidates
                 Write-MtrItem $(if ($details.Failed) { 'Warn' } else { 'Ok' }) ("Routes: {0}/{1} deliveries read {2} {3} events{4}" -f $details.Done, $details.Items, $dot, (Format-MtrNumber $details.Events), $(if ($details.Failed) { " $dot $($details.Failed) failed" } else { '' })) -Icon Route
             } else {
-                Write-MtrItem Skip ("Routes: nothing new to read{0}." -f $(if ($settings.Details.OnlyProblems) { ' (only deliveries not delivered: Details.OnlyProblems)' } else { '' }))
+                Write-MtrItem Skip ("Routes: nothing new to read{0}." -f $(if ($d.OnlyProblems -and $selection.Deliveries -gt $d.MaxDeliveries) { ' (beyond Details.MaxDeliveries, only the deliveries not delivered: Details.OnlyProblems)' } else { '' }))
             }
+        }
+        # Small selection: the route of each message, recipients grouped by identical route.
+        if ($selection.Messages -and $selection.Messages -le $settings.Details.ConsoleMessages -and $store.CountSelectionRoutes() -gt 0) {
+            $journeys = [MessageTraceReport.Journeys]::Build($store.ReadSelection(), $store.GetSelectionDetails(), $settings.Details.ConsoleMessages)
+            Write-MtrJourney -Journeys $journeys -Zone $zone
+            Write-Host ''
         }
 
         $runDir = New-MtrRunDirectory -Root $settings.Report.OutputPath -Mode $Mode -Zone $zone
@@ -376,6 +399,13 @@ try {
             @{ Name = 'File'; Property = 'File'; Width = 0 }
         ) -Rows @($files)
         if ($report.HtmlTruncated) { Write-MtrItem Info ("HTML: the {0} newest messages (Report.HtmlMaxMessages); the CSV files hold all of them." -f (Format-MtrNumber $report.HtmlMessages)) }
+        if ($report.Reasons.Count) {
+            Write-Host ''
+            Write-MtrItem Info ("Why deliveries were not delivered: {0} of {1} explained by the routes read" -f (Format-MtrNumber $report.ProblemRoutesRead), (Format-MtrNumber $report.ProblemDeliveries)) -Icon Route
+            Write-MtrReasons -Report $report
+        } elseif ($report.ProblemDeliveries -and -not $settings.Details.Enabled -and $Mode -eq 'Trace') {
+            Write-MtrItem Skip ("{0} deliveries were not delivered: add -IncludeDetails to read why (route of each delivery)." -f (Format-MtrNumber $report.ProblemDeliveries))
+        }
 
         $incomplete = ($collect -and ($collect.Failed.Count -or $collect.Cancelled)) -or ($workPlan -and $workPlan.UnrecoverableMs -gt 0) -or $coverage -lt 99.95
         $runStatus = if ($incomplete) { 'Incomplete' } else { 'Succeeded' }
@@ -387,9 +417,13 @@ try {
         $values = [ordered]@{
             Period   = @('Calendar', (Format-MtrRange $period.StartMs $period.EndMs $zone))
             Messages = @('Mail', ("{0} messages {1} {2} deliveries{3}" -f (Format-MtrNumber $report.Messages), $dot, (Format-MtrNumber $report.Deliveries), $(if ($statusText) { "  ($statusText)" } else { '' })))
+            Routes   = @('Route', $(if ($report.RoutesRead) { "{0} routes in the report {1} {2} of {3} problems explained" -f (Format-MtrNumber $report.RoutesRead), $dot, (Format-MtrNumber $report.ProblemRoutesRead), (Format-MtrNumber $report.ProblemDeliveries) } elseif ($settings.Details.Enabled) { 'none read' } else { 'not read (-IncludeDetails)' }))
             Graph    = @('Download', $graphText)
             Folder   = @('Folder', $runDir)
             Duration = @('Clock', (Format-MtrDuration $clock.Elapsed.TotalSeconds))
+        }
+        if ($report.Causes.Count) {
+            $values.Insert(3, 'Causes', @('Target', ((($report.Causes | Select-Object -First 3) | ForEach-Object { "$($_.Cause) $(Format-MtrNumber $_.Deliveries)" }) -join ', ') + $(if ($report.Causes.Count -gt 3) { " +$($report.Causes.Count - 3)" } else { '' })))
         }
         Write-MtrSummary -Title $(if ($incomplete) { 'Report ready, incomplete' } else { 'Report ready' }) -Status $(if ($incomplete) { 'Warn' } else { 'Ok' }) -Values $values
 

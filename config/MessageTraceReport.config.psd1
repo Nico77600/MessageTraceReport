@@ -2,7 +2,7 @@
 #  Message Trace Report - configuration file
 #  --------------------------------------------------------------------------
 #  Author  : Nicolas Fabert
-#  Version : 1.0.0
+#  Version : 1.1.0
 #
 #  Read by Invoke-MessageTraceReport.ps1. It is a PowerShell data file: text between quotes,
 #  $true / $false, numbers, @( ) for lists and @{ } for groups of settings. Lines starting with #
@@ -63,13 +63,20 @@
     }
 
     # ---------------------------------------------------------------------
-    # Route of the deliveries (Receive, Deliver, Fail ... events), shown in the HTML report.
-    # One request per delivery: keep MaxDeliveries small. -IncludeDetails enables it for one run.
+    # Route of the deliveries (Receive, Submit, Deliver, Fail, Defer ... with the reason of each failure),
+    # read with getDetailsByRecipient: one request per delivery, separate quota. -IncludeDetails enables
+    # it for one run, -MaxRoutes changes MaxDeliveries for one run. Routes already read are reused.
+    #   - a selection of at most MaxDeliveries deliveries: every route is read (complete trace of a message);
+    #   - otherwise, newest message first: one recipient per problem status of each message and, when
+    #     other recipients were delivered, one of them (CompareWithDelivered) to see where the routes
+    #     split; then the other problems; then the delivered ones when OnlyProblems = $false.
     # ---------------------------------------------------------------------
     Details = @{
-        Enabled       = $false
-        MaxDeliveries = 50
-        OnlyProblems  = $true    # only deliveries not delivered (failed, pending, quarantined ...)
+        Enabled              = $false
+        MaxDeliveries        = 100
+        OnlyProblems         = $true    # beyond MaxDeliveries: no delivered recipient, except the comparisons below
+        CompareWithDelivered = $true    # message partly delivered: also read one delivered recipient to compare the routes
+        ConsoleMessages      = 3        # selection of at most this many messages: their route is shown in the console
     }
 
     # ---------------------------------------------------------------------
@@ -104,7 +111,7 @@
         OutputPath               = '.\reports'
         FilePrefix               = 'MessageTrace'
         Formats                  = @('Csv', 'Html')   # Csv, Html, Json
-        Files                    = @('Messages', 'Deliveries', 'Senders', 'Recipients')
+        Files                    = @('Messages', 'Deliveries', 'Senders', 'Recipients', 'Routes')   # Routes: one row per step of the routes read
         CountsPerDay             = $true           # Senders / Recipients counted per day when the period is longer than one day
         CsvDelimiter             = ';'             # ';' opens directly in Excel with French regional settings
         MaxRowsPerFile           = 1000000         # a CSV file above this is continued in _part2, _part3 (Excel: 1,048,575 at most)

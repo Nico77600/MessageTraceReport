@@ -2,7 +2,7 @@
 //  Message Trace Report - engine, part 4: SQLite store
 // -----------------------------------------------------------------------------
 //  Author  : Nicolas Fabert
-//  Version : 1.0.0
+//  Version : 1.1.0
 //
 //  Tables (times in Unix ms, UTC)
 //    run           one row per execution
@@ -608,27 +608,61 @@ ORDER BY m.received_ms DESC, m.id DESC"))
         }
 
         /// <summary>
-        /// Deliveries of the selection whose route should be read: not delivered first, then the newest; the
-        /// routes already read since the last change of the delivery are skipped.
+        /// Deliveries of the selection whose route should be read (the routes already read since the last change
+        /// of the delivery are reused, never read again):
+        ///   - selection of at most <paramref name="max"/> deliveries: every one (the complete trace of a message);
+        ///   - otherwise, newest message first: for each message with a problem, one recipient of each problem
+        ///     status and, when other recipients were delivered, one of them to compare the routes; then the other
+        ///     problems; then, when <paramref name="onlyProblems"/> is false, the delivered ones.
         /// </summary>
-        public List<DetailItem> GetDetailCandidates(int max, bool onlyProblems)
+        public List<DetailItem> GetDetailCandidates(int max, bool onlyProblems, bool compareWithDelivered = true)
         {
             var list = new List<DetailItem>();
             if (max <= 0) return list;
-            string sql = @"SELECT m.id, d.recipient, m.trace_id, ra.address
-FROM sel s JOIN message m ON m.id = s.message JOIN delivery d ON d.message = s.message AND d.recipient = s.recipient
-JOIN address ra ON ra.id = d.recipient LEFT JOIN status st ON st.id = d.status
-LEFT JOIN detail_fetch f ON f.message = d.message AND f.recipient = d.recipient
-WHERE (f.fetched_ms IS NULL OR f.fetched_ms < d.updated_ms) AND ra.address <> ''" + (onlyProblems ? " AND coalesce(st.name,'') NOT IN ('delivered','expanded')" : "") + @"
-ORDER BY CASE WHEN coalesce(st.name,'') IN ('delivered','expanded') THEN 1 ELSE 0 END, m.received_ms DESC LIMIT @n";
+            long total = Scalar("SELECT count(*) FROM sel");
+            bool everything = total <= max;
+            const string sql = @"WITH c AS (
+  SELECT d.message AS m, d.recipient AS r, m.trace_id AS t, ra.address AS a, m.received_ms AS ms, coalesce(st.name,'') AS sname,
+         CASE WHEN coalesce(st.name,'') IN ('delivered','expanded') THEN 0 ELSE 1 END AS problem,
+         CASE WHEN f.fetched_ms IS NULL OR f.fetched_ms < d.updated_ms THEN 1 ELSE 0 END AS todo
+  FROM sel s JOIN message m ON m.id = s.message JOIN delivery d ON d.message = s.message AND d.recipient = s.recipient
+  JOIN address ra ON ra.id = d.recipient LEFT JOIN status st ON st.id = d.status
+  LEFT JOIN detail_fetch f ON f.message = d.message AND f.recipient = d.recipient
+  WHERE ra.address <> ''),
+mixed AS (SELECT m FROM c GROUP BY m HAVING max(problem) = 1 AND max(CASE WHEN sname = 'delivered' THEN 1 ELSE 0 END) = 1),
+n AS (SELECT c.*, ROW_NUMBER() OVER (PARTITION BY c.m, c.problem, c.sname ORDER BY c.r) AS rn FROM c)
+SELECT m, r, t, a, todo, problem,
+  CASE WHEN problem = 1 AND rn = 1 THEN 1
+       WHEN sname = 'delivered' AND rn = 1 AND m IN (SELECT m FROM mixed) THEN 1
+       WHEN problem = 1 THEN 2 ELSE 3 END AS pass
+FROM n ORDER BY pass, ms DESC, m, problem DESC, r";
             using (var c = Command(sql))
             {
-                c.Parameters.AddWithValue("@n", max);
+                c.CommandTimeout = 0;
                 using (var r = c.ExecuteReader())
-                    while (r.Read())
-                        list.Add(new DetailItem { MessageRowId = r.GetInt64(0), RecipientId = r.GetInt64(1), TraceId = TraceText((byte[])r.GetValue(2)), Recipient = r.GetString(3) });
+                {
+                    while (r.Read() && list.Count < max)
+                    {
+                        if (r.GetInt64(4) == 0) continue;   // already read
+                        bool problem = r.GetInt64(5) == 1;
+                        long pass = r.GetInt64(6);
+                        string kind = problem ? "Problem" : pass == 1 ? "Comparison" : "Delivered";
+                        if (!everything)
+                        {
+                            if (kind == "Comparison" && !compareWithDelivered) continue;
+                            if (kind == "Delivered" && onlyProblems) continue;
+                        }
+                        list.Add(new DetailItem { MessageRowId = r.GetInt64(0), RecipientId = r.GetInt64(1), TraceId = TraceText((byte[])r.GetValue(2)), Recipient = r.GetString(3), Kind = kind });
+                    }
+                }
             }
             return list;
+        }
+
+        /// <summary>Deliveries of the selection whose route is in the database (read now or before).</summary>
+        public long CountSelectionRoutes()
+        {
+            return Scalar("SELECT count(*) FROM sel s WHERE EXISTS (SELECT 1 FROM detail x WHERE x.message = s.message AND x.recipient = s.recipient)");
         }
 
         /// <summary>Route events of the selection, by "message|recipient" row ids.</summary>

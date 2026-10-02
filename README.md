@@ -43,6 +43,7 @@ The **Microsoft Graph message trace API** traces Exchange Online messages withou
 - **One shared rolling budget** of 90 requests per 5 minutes (configurable), `Retry-After` honoured, token renewed, network errors retried — and the requests of the last 5 minutes are remembered by the next run.
 - **Page by page into SQLite**: Ctrl+C or a failure keeps what was received; the next run collects only the rest. A period already collected by the same or a wider query is not asked again; only the last hours, which may still change, are.
 - **`-Mode Collect`** every day keeps the whole tenant beyond the 90 days of Graph; `-Mode Report` answers from the database only, with any address pattern.
+- **Why a message was not delivered**: with `-IncludeDetails` the route of each recipient is read and explained — *Blocked by DLP*, *Blocked by mail flow rule (ETR)*, *Recipient not found*, *Mailbox full*, *Quarantined*, *Rejected by remote server*… with the rule, the status code and its Microsoft Learn page, and **where the route of a failed recipient left the route of the delivered ones**.
 - **Read-only**, one permission (`ExchangeMessageTrace.Read.All`), certificate authentication built in — no module to install, SQLite bundled.
 
 ## Before / after
@@ -58,16 +59,16 @@ The **Microsoft Graph message trace API** traces Exchange Online messages withou
 
 <table>
   <tr>
-    <td width="50%" valign="top"><a href="docs/images/report-overview-light.png"><img alt="HTML report overview" src="docs/images/report-overview-light.png"></a><br><sub><b>HTML report</b> &middot; tiles, delivery status, messages over time, top senders and recipients</sub></td>
-    <td width="50%" valign="top"><a href="docs/images/report-message.png"><img alt="A message, its recipients and its route" src="docs/images/report-message.png"></a><br><sub><b>A message</b> &middot; every recipient with its status, and the route of the failed ones</sub></td>
+    <td width="50%" valign="top"><a href="docs/images/report-overview-light.png"><img alt="HTML report overview" src="docs/images/report-overview-light.png"></a><br><sub><b>HTML report</b> &middot; tiles, delivery status, messages over time, top senders and recipients, why deliveries were not delivered</sub></td>
+    <td width="50%" valign="top"><a href="docs/images/report-message.png"><img alt="A message, its recipients and its route" src="docs/images/report-message.png"></a><br><sub><b>A message</b> &middot; recipients grouped by route, where the routes split, the cause and the rule</sub></td>
   </tr>
   <tr>
     <td width="50%" valign="top"><a href="docs/images/console-trace.png"><img alt="A trace in the console" src="docs/images/console-trace.png"></a><br><sub><b>Console</b> &middot; plan, Microsoft Graph, collection with a live progress line, files</sub></td>
-    <td width="50%" valign="top"><a href="docs/images/console-status.png"><img alt="Database status" src="docs/images/console-status.png"></a><br><sub><b>Status</b> &middot; what the database holds, day by day, and the last runs</sub></td>
+    <td width="50%" valign="top"><a href="docs/images/console-route.png"><img alt="The route of one message in the console" src="docs/images/console-route.png"></a><br><sub><b>One message</b> &middot; one recipient failed, the others delivered: why, and where the routes split</sub></td>
   </tr>
 </table>
 
-Each run writes `Messages.csv` (one row per message), `Deliveries.csv` (one row per message and recipient, what Graph returns), `Senders.csv` and `Recipients.csv` (per day), optionally JSON with the Graph property names, and a self-contained HTML report that stays fast with 200,000 messages.
+Each run writes `Messages.csv` (one row per message), `Deliveries.csv` (one row per message and recipient, what Graph returns, with the route, cause and reason when read), `Routes.csv` (one row per step of the routes read), `Senders.csv` and `Recipients.csv` (per day), optionally JSON with the Graph property names, and a self-contained HTML report that stays fast with 200,000 messages.
 
 ## Requirements
 
@@ -90,6 +91,7 @@ notepad .\config\MessageTraceReport.config.psd1        # TenantId, AppId, Certif
 .\Invoke-MessageTraceReport.ps1 -Recipient *@fabrikam.com -Status Failed -Range Last7Days -Open
 .\Invoke-MessageTraceReport.ps1 -SenderFile .\vip.csv -Recipient *@gmail.com -Start 2026-09-01 -End 2026-10-01
 .\Invoke-MessageTraceReport.ps1 -Sender alerts@contoso.com -Recipient helpdesk@contoso.com -Operator Or -IncludeDetails
+.\Invoke-MessageTraceReport.ps1 -MessageId '<CAJ1234@mail.contoso.com>' -Range Last10Days -IncludeDetails   # why each recipient got it or not
 .\Invoke-MessageTraceReport.ps1 -Mode Collect                                     # scheduled task, whole tenant
 .\Invoke-MessageTraceReport.ps1 -Mode Report -Range Last30Days -Sender 'sales-*@contoso.com'
 .\Invoke-MessageTraceReport.ps1 -Mode Status

@@ -1,7 +1,7 @@
 ---
 title: Message Trace Report
 subtitle: Administrator guide
-version: 1.0.0
+version: 1.1.0
 author: Nicolas Fabert
 updated: 2026-10-02
 ---
@@ -23,7 +23,7 @@ updated: 2026-10-02
 search | What it reads | The message trace of Exchange Online, through Microsoft Graph — **read-only**, nothing else.
 target | What it plans | One query per address of the shorter list, windows of up to 10 days, only what the database does not hold yet, within **100 requests per 5 minutes** for the tenant.
 database | What it keeps | Every message and delivery in a local SQLite database: re-running a trace is immediate, and a scheduled collection keeps the history **beyond 90 days**.
-file | What it leaves you | Messages, deliveries, senders and recipients as CSV (and JSON), and a self-contained HTML report with charts, search and the route of each message.
+file | What it leaves you | Messages, deliveries, senders and recipients as CSV (and JSON), and a self-contained HTML report with charts, search, the **route** of each message and the **cause** of each failure (blocked by DLP, by a mail flow rule, recipient not found, mailbox full…).
 ```
 
 ## Quick start
@@ -82,7 +82,7 @@ file | Report | CSV · JSON · HTML
 3. **Minus the database.** For each query, the periods already collected — by the same query, by a wider one (the whole tenant, a `*@domain` that includes the address, fewer conditions), and **settled** (`Collection.SettlingHours`, 4 h by default) — are removed. What is older than 90 days and not in the database is reported as unavailable.
 4. **Windows.** What remains is cut into windows of at most 10 days, newest first. A query without address (the whole tenant, a subject) is cut into windows of 24 hours or less, so that several windows are read in parallel.
 5. **Collection.** Up to `MaxConcurrency` workers send the requests through **one rolling-window limiter** (90 requests per 5 minutes by default). A 429 pauses every worker for the `Retry-After` time; a 401 renews the token; 5xx and network errors are retried. One writer thread stores each page in SQLite, in one transaction, and extends the coverage of its window: the API returns the newest messages first, so after each page the window is complete from just after its oldest message.
-6. **Report.** The full filter is applied to the database (`Store.Select`), then one pass writes every file. Optionally the **route** of the failed deliveries is read first (`getDetailsByRecipient`, separate quota).
+6. **Report.** The full filter is applied to the database (`Store.Select`), then one pass writes every file. Optionally the **route** of the deliveries is read first (`getDetailsByRecipient`, separate quota): every recipient of a small selection, otherwise the problems first with one delivered recipient of the same message to compare (chapter 9).
 
 > [!NOTE]
 > The quota is per **tenant**: other tools and administrators share it. The timestamps of the last 5 minutes of requests are saved in the database, so the next run on this computer starts with what is already used.
@@ -194,7 +194,9 @@ The tool checks the token before the first request: the tenant must be `Tenant.T
 | | `RequestTimeoutSeconds`, `MaxRetries` | 180, 5 | Per request; 429 waits are counted apart. |
 | | `SourceHistoryDays` | 90 | History kept by Graph. |
 | Throttling | `MaxRequests`, `PeriodSeconds` | 90, 300 | The rolling budget of the tool. Microsoft: 100 per 5 minutes — keep a margin for the other tools. |
-| Details | `Enabled`, `MaxDeliveries`, `OnlyProblems` | `$false`, 50, `$true` | Route of the deliveries in the report (`-IncludeDetails`). One request per delivery. |
+| Details | `Enabled`, `MaxDeliveries` | `False`, 100 | Route and cause of the deliveries (`-IncludeDetails`, `-MaxRoutes`). One request per delivery, read once. A selection of at most `MaxDeliveries` is read completely. |
+| | `OnlyProblems`, `CompareWithDelivered` | `True`, `True` | Beyond `MaxDeliveries`: only the deliveries not delivered, plus one delivered recipient of each partly delivered message (to see where the routes split). |
+| | `ConsoleMessages` | 3 | A selection of at most this many messages shows its routes in the console. |
 | Collect | `Days` | 2 | `-Mode Collect`: how far back each run checks. |
 | | `Senders`, `Recipients`, `SenderFile`, `RecipientFile`, `Operator` | empty, `Or` | Scope of the collection. Empty = the whole tenant. |
 | Storage | `DatabasePath` | `.\data\MessageTraceReport.sqlite` | The history. |
@@ -202,7 +204,7 @@ The tool checks the token before the first request: the tenant must be `Tenant.T
 | Report | `DefaultRange` | `Last48Hours` | When no period is given. |
 | | `TimeZone` | `Europe/Paris` | Dates and days of the reports. |
 | | `OutputPath`, `FilePrefix` | `.\reports`, `MessageTrace` | One sub-folder per run. |
-| | `Formats`, `Files` | `Csv`, `Html`; all four files | `Json` also available; `Messages`, `Deliveries`, `Senders`, `Recipients`. |
+| | `Formats`, `Files` | `Csv`, `Html`; all five files | `Json` also available; `Messages`, `Deliveries`, `Senders`, `Recipients`, `Routes` (written when routes were read). |
 | | `CountsPerDay` | `$true` | Senders and recipients counted per day when the period is longer than a day. |
 | | `CsvDelimiter` | `;` | Opens directly in Excel with French regional settings. |
 | | `MaxRowsPerFile` | 1,000,000 | A CSV file is continued in `_part2`, `_part3`… |
@@ -251,6 +253,50 @@ The tool checks the token before the first request: the tenant must be `Tenant.T
 > [!TIP]
 > A long investigation over many addresses can be interrupted with **Ctrl+C**: the pages already received are kept. Run the same command again to continue.
 
+### Why a message was not delivered
+
+The message trace gives the **status** of each recipient (Delivered, Failed, Pending, Quarantined…). `-IncludeDetails` also reads the **route** of the deliveries (`getDetailsByRecipient`: Receive, Submit, DLP rule, Transport rule, Spam, Expand, Defer, Fail, Deliver…) and tells, for each recipient not delivered, **the cause**, the status code, the rule or the component that decided, the remote server, and where its route left the route of the recipients who received the message.
+
+```powershell
+# One message: every recipient, grouped by identical route, in the console and the report
+.\Invoke-MessageTraceReport.ps1 -MessageId '<CAJ1234@mail.contoso.com>' -Range Last10Days -IncludeDetails
+
+# Failures of a sender over 7 days: up to 300 routes (default 100, Details.MaxDeliveries)
+.\Invoke-MessageTraceReport.ps1 -Sender payroll@contoso.com -Range Last7Days -MaxRoutes 300 -Open
+```
+
+![The route of one message: a recipient blocked, the others delivered](images/console-route.png)
+
+**Which routes are read.** One request per delivery, on a quota of its own (100 per 5 minutes). A selection of at most `Details.MaxDeliveries` deliveries (100) is read completely. A larger one is read newest message first: for each message with a problem, one recipient of each problem status and — when other recipients received it — **one delivered recipient to compare** (`CompareWithDelivered`); then the other problems; the delivered ones only with `OnlyProblems = $false`. A route is read once: the next runs reuse it from the database (until the status of the delivery changes).
+
+**Grouping and split.** The recipients of a message that followed the same steps with the same result share a route (*Route A*, *Route B*…), problems first. When some recipients failed and others were delivered, the report shows the steps the routes have in common and, side by side, what happened next — for example *the same up to the DLP rule, then Fail 5.7.171 for route A, Deliver for route B*.
+
+**Causes.** Each route not ending in the inbox gets a cause, in plain words:
+
+| Cause | Decided from |
+|---|---|
+| Blocked by DLP | Component *DLP Policy Agent*, a *DLP rule* step with a blocking action (`BA`), 5.7.171 (seen in the lab) |
+| Blocked by mail flow rule (ETR) | Component *Transport Rule Agent*, `TRANSPORT.RULES.RejectMessage`, codes 5.7.900–5.7.999 (reserved for mail flow rules) |
+| Deleted / Quarantined by mail flow rule (ETR) | A *Transport rule* step that deletes or quarantines |
+| Blocked by organization policy | 5.7.1 *Delivery not authorized, message refused* — the default text of both DLP and mail flow rules — when the route does not say which one |
+| Blocked by Tenant Allow/Block List | 5.7.703 |
+| Blocked: malware, Quarantined: malware | A *Malware* step |
+| Quarantined: spam or phishing, Junk Email folder, Blocked as spam or phishing | A *Spam* step (SCL, SFV) and the folder of the delivery |
+| Recipient not found | 5.1.1, 5.1.10, 5.4.1 (directory-based edge blocking), `RESOLVER.ADR` |
+| Mailbox full | 5.2.2 |
+| Sender not allowed by recipient | `RESOLVER.RST` (delivery restrictions, moderation), 5.7.12, 5.7.13, 5.7.124, 5.7.133–5.7.136 |
+| Sender authentication failed | 5.7.23 (SPF), 5.7.509 (DMARC), 5.7.25, 5.7.26 |
+| Sending limit exceeded, Sender or IP blocked | 5.2.121, 5.2.122, 4.3.2, 5.7.232–5.7.236; 5.1.8, 5.7.501–5.7.513, 5.7.606–5.7.649, 5.7.700–5.7.750 |
+| External forwarding blocked, Relay denied, Routing loop | 5.7.520; 5.7.64, 5.7.57, 5.7.367; 5.4.6–5.4.20 |
+| Destination server unreachable, TLS or certificate problem, Expired in queue | 4.4.x, 5.4.4, 5.4.316; 5.7.321–5.7.325; 4.4.7, 5.4.300 |
+| Recipient not found / Mailbox full (remote server), Rejected by remote server | The answer of the recipient's server (outbound messages) |
+| Message size or format, Delayed (retrying), Dropped without NDR, Other failure | 5.3.4, 5.6.x; a *Defer* step; a *Drop* step; anything else (the status code is always shown) |
+
+The status codes link to their page of [Email non-delivery reports and SMTP errors in Exchange Online](https://learn.microsoft.com/exchange/mail-flow-best-practices/non-delivery-reports-in-exchange-online/non-delivery-reports-in-exchange-online).
+
+> [!TIP]
+> **Finding the rule.** The route names the DLP or mail flow rule, or gives its ID when the names are empty: `Get-TransportRule | Where-Object { "$($_.Guid)" -eq '<id>' -or "$($_.ImmutableId)" -eq '<id>' }` (Exchange Online PowerShell), `Get-DlpComplianceRule | Where-Object { "$($_.Guid)" -eq '<id>' -or "$($_.ImmutableId)" -eq '<id>' }` (Security & Compliance PowerShell).
+
 <!-- icon: calendar -->
 ## 10. Scheduled collection
 
@@ -290,18 +336,21 @@ Each run writes a folder `reports\<yyyy-MM-dd_HHmmss>_<Mode>\`:
 
 | File | One row per | Columns |
 |---|---|---|
-| `MessageTrace_Messages.csv` | message | Received, Sender, Recipients, Recipient count, Status (`Delivered`, or `Delivered 24, Failed 2`), Subject, Size, Message ID, From IP, Message trace ID |
-| `MessageTrace_Deliveries.csv` | message and recipient | Received, Sender, Recipient, Status, Subject, Size, Message ID, From IP, To IP, Message trace ID — what Graph returns |
+| `MessageTrace_Messages.csv` | message | Received, Sender, Recipients, Recipient count, Status (`Delivered`, or `Delivered 24, Failed 2`), Subject, Size, Message ID, From IP, Message trace ID, Cause, Reason (of the worst recipient whose route was read) |
+| `MessageTrace_Deliveries.csv` | message and recipient | Received, Sender, Recipient, Status, Subject, Size, Message ID, From IP, To IP, Message trace ID — what Graph returns — then Route (`Receive > Submit > Fail (550 5.1.10)`), Cause (`Blocked by DLP (rule 'Block credit cards')`) and Reason (`550 5.7.171 Delivery not authorized, message refused [DLP Policy Agent]`) when the route was read |
+| `MessageTrace_Routes.csv` | step of a route read | Received, Sender, Recipient, Status, Cause, Subject, Step, Time, Elapsed (s), Event, Action, Detail, Status code, Reason, Component, Remote server, Facts (server, connector, TLS, SCL…), Message ID, Message trace ID |
 | `MessageTrace_Senders.csv` | sender (and day) | Date, Sender, Messages, Recipients, Delivered, Failed, Other, Last message |
 | `MessageTrace_Recipients.csv` | recipient (and day) | Date, Recipient, Messages, Delivered, Failed, Other, Last message |
-| `MessageTrace_Messages.json`, `_Deliveries.json` | (option `Json`) | Graph property names (`id`, `messageId`, `receivedDateTime`, `senderAddress` …) |
+| `MessageTrace_Messages.json`, `_Deliveries.json` | (option `Json`) | Graph property names (`id`, `messageId`, `receivedDateTime`, `senderAddress` …); when the route was read: `route`, `outcome`, `causeId`, `cause`, `reason` and the `events` as Graph returns them |
 | `MessageTrace.html` | — | The report below |
 
-CSV files are UTF-8 with BOM, `;` by default, and a cell starting with `= + - @` is prefixed with `'` so that Excel never runs it as a formula.
+CSV files are UTF-8 with BOM, `;` by default, and a cell starting with `= + - @` is prefixed with `'` so that Excel never runs it as a formula. The columns added in 1.1.0 are at the end: scripts reading the 1.0 files by name or position keep working.
 
-The HTML report is one self-contained file (the data is compressed inside): tiles, delivery status, messages over time (failures in red), top 10 senders and recipients (click to filter), and a table that stays fast with 200,000 messages — search, filters by sender, recipient, subject, status, dates and Message ID, sort, export of the view. A click on a message opens its recipients with their status and, when it was read (`-IncludeDetails`), the **route** (Receive, Submit, Fail, Deliver… with the reason).
+The HTML report is one self-contained file (the data is compressed inside): tiles, delivery status, messages over time (failures in red), top 10 senders and recipients (click to filter), **why deliveries were not delivered** (one card per cause, then the status codes, with their Microsoft Learn page — click to filter), and a table that stays fast with 200,000 messages — search (reasons included), filters by sender, recipient, subject, status, **cause**, *partly delivered*, dates and Message ID, sort, export of the view. With routes, the table has a **Cause** column.
 
 ![HTML report](images/report-overview-light.png)
+
+A click on a message opens its recipients and, when it was read, the **route**: recipients grouped by identical route, *where the routes split* (common steps, then the failed and the delivered recipient side by side), for each route the cause, the rule, the status code with its meaning and its page, the component, the remote server, and every step with its time, the time since the first step and its details (server, connector, TLS, spam verdict…).
 
 ![A message and its route](images/report-message.png)
 
@@ -352,17 +401,21 @@ Logs: `logs\MessageTraceReport_<yyyyMMdd>.log`, one line per event, every 60 sec
 | `src\Connection.ps1` | Token: certificate (client assertion), secret, interactive (MSAL); checks tenant and permission; renewal |
 | `src\Collection.ps1` | Runs the engine with the progress loop, prints its events, Ctrl+C |
 | `src\Report.ps1` | Selection and report files |
+| `src\Route.ps1` | The route of a message and the causes in the console |
 | `src\Status.ps1` | Status, retention, lock |
 | `src\Engine.Common.cs` | Time ranges, coverage arithmetic, addresses, CSV safety |
 | `src\Engine.Plan.cs` | `FilterSpec`, `Condition`, `QuerySpec`, `Planner` (queries, coverage reuse, windows) |
 | `src\Engine.Graph.cs` | `RateLimiter`, `TokenSlot`, `GraphClient` (retries), `Collector`, `DetailCollector` |
-| `src\Engine.Store.cs` | SQLite schema, page ingestion, coverage, selection, statistics, purge |
-| `src\Engine.Report.cs` | CSV (parts), JSON, HTML (compressed chunks), aggregates |
+| `src\Engine.Store.cs` | SQLite schema, page ingestion, coverage, selection, routes to read, statistics, purge |
+| `src\Engine.Route.cs` | `RouteAnalyzer`: steps of a route, facts of the XML data, reason (codes, remote server, Learn page), **cause**, grouping of recipients (`Journeys`) |
+| `src\Engine.Report.cs` | CSV (parts), JSON, HTML (compressed chunks), aggregates, causes |
 | `templates\Report.template.html` | The HTML page: edit texts, colours, columns — no rebuild |
 
 **Database.** `address` and `status` (dictionaries), `message` (one row per message trace ID: Message-ID, sender, subject, received, source IP), `delivery` (message × recipient: status, size, destination IP, last update), `signature` (one row per distinct Graph query, as sorted conditions), `coverage` (`[start, end)` collected for a signature, with the collection time), `detail` / `detail_fetch` (routes), `run`, `metadata`. Times are Unix milliseconds UTC.
 
 **Adding a filter property.** `FilterSpec` and `Planner.Plan` (Engine.Plan.cs), `Store.Select` (the SQL), `New-MtrFilter` (checks), the parameter of the entry script, the tests.
+
+**Adding a cause.** The `Causes` table (id, label, tone, help) and `ByReason` / `FindCause` in `Engine.Route.cs` — the order of the checks matters (policies, network, remote server, then codes) — and a line of the test *names the cause of each failure* or *reads the cause from the code*.
 
 <!-- icon: beaker -->
 ## 16. Testing a change
@@ -394,6 +447,10 @@ The tests use `tests\FakeGraph.cs`, an in-memory message trace API that behaves 
 | `Another execution is already collecting` | The scheduled task runs on the same database: wait, or `-Mode Report`. |
 | Coverage below 100% in `-Mode Report` | The database does not hold the whole period for this filter: run the trace without `-Mode Report`. |
 | The HTML page stays on *Loading* | Old browser without `DecompressionStream`: use a recent Edge, Chrome or Firefox, or the CSV files. |
+| Cause *Blocked by organization policy* | 5.7.1 *Delivery not authorized, message refused* without the component or the rule step: a DLP or mail flow rule with the default text. Open the route: the *DLP rule* / *Transport rule* steps give the candidates. |
+| *Routes: nothing new to read* | The routes of the selection are already in the database (they are read once), or the selection holds only delivered messages beyond `MaxDeliveries` (`OnlyProblems`). |
+| Few routes read on a large selection | `Details.MaxDeliveries` (100) or `-MaxRoutes`: the problems of the newest messages are read first. |
+| `Get-TransportRule` finds no rule with the ID of the route | The rule was deleted or renamed since; message trace keeps the ID it had at the time. |
 
 <!-- icon: link -->
 ## Annex B — Microsoft Graph calls
@@ -402,7 +459,7 @@ The tests use `tests\FakeGraph.cs`, an in-memory message trace API that behaves 
 |---|---|
 | `POST https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token` | Token (client credentials with a client assertion or a secret), renewed 5 minutes before expiry or after a 401 |
 | `GET /v1.0/admin/exchange/tracing/messageTraces?$filter=…&$top=5000` | Every window, then `@odata.nextLink` |
-| `GET /v1.0/admin/exchange/tracing/messageTraces/{id}/getDetailsByRecipient(recipientAddress='…')` | `-IncludeDetails` only |
+| `GET /v1.0/admin/exchange/tracing/messageTraces/{id}/getDetailsByRecipient(recipientAddress='…')` | `-IncludeDetails` / `-MaxRoutes` only, once per delivery (separate quota) |
 
 Every request carries a `client-request-id` and the `User-Agent` `MessageTraceReport/<version>`; responses are compressed (gzip / brotli).
 
@@ -415,7 +472,8 @@ Lab tenant with about 4,200 shared mailboxes and two DLP load tests (150,000 and
 - Traces of 1, 2, 3 and 20 addresses, AND / OR, `*@domain`, status, subject, routes — compared with the patched original script (chapter 4).
 - Whole tenant, 30 busy minutes: 447,078 deliveries in 5 min 01 s, 91 requests, no 429; database 26 MB.
 - `-Mode Collect` (2 days), `-Mode Status`, `-Mode Report` with patterns; interruption (Ctrl+C) and resume.
-- 49 Pester tests.
+- Routes (1.1.0): a message to 25 recipients, one failed *554 5.2.2 mailbox full*, 24 delivered by two routes — split after the DLP rule; 66 recipients blocked by DLP (*550 5.7.171*, *DLP Policy Agent*, rule ID); a delay *450 4.4.317* towards the on-premises hybrid server; a quarantine (SCL 8, SFV SPM); a distribution group expansion. Events of the same second come back unordered (Fail before the DLP rule that caused it): they are ordered by step. Mail flow rule rejections were not produced in the lab: their signatures come from the Microsoft documentation and are covered by the tests.
+- 59 Pester tests.
 
 <!-- icon: tag -->
 ## Annex D — Versioning and release checklist

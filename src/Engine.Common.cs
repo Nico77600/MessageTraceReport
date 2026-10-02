@@ -2,7 +2,7 @@
 //  Message Trace Report - engine, part 1: common types
 // -----------------------------------------------------------------------------
 //  Author  : Nicolas Fabert
-//  Version : 1.0.0
+//  Version : 1.1.0
 //
 //  The engine (src\Engine.*.cs) is compiled by the module the first time it is
 //  used, and again only when a source file changes (bin\MessageTraceReport.Engine.<hash>.dll).

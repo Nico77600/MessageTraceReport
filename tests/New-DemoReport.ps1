@@ -5,9 +5,10 @@
 
 .DESCRIPTION
     The data goes through the real engine: the in-memory message trace API of the tests (tests\FakeGraph.cs)
-    answers the collector, the messages are stored in a temporary SQLite database, the route of the failed
-    deliveries is read, and the HTML / CSV files are written as in a real run. Used for the screenshots of the
-    documentation; also a quick way to see the report without a tenant.
+    answers the collector, the messages are stored in a temporary SQLite database, the route of the deliveries
+    not delivered (and of one delivered recipient of the same messages, to compare) is read, and the HTML / CSV
+    files are written as in a real run. Used for the screenshots of the documentation; also a quick way to see
+    the report without a tenant.
 
 .PARAMETER OutputPath
     Folder of the report. Default: a new folder in the temporary directory.
@@ -20,7 +21,7 @@
 
 .NOTES
     Author  : Nicolas Fabert
-    Version : 1.0.0
+    Version : 1.1.0
 #>
 [CmdletBinding()]
 param([string]$OutputPath, [int]$Messages = 2400, [switch]$Open)
@@ -60,16 +61,23 @@ for ($i = 0; $i -lt $Messages; $i++) {
         if ($r -ne $sender -and -not $recipients.Contains($r)) { $recipients.Add($r) }
         if ($recipients.Count -ge $people.Count + $external.Count - 2) { break }
     }
+    # External senders sometimes write to the internal-only distribution group; payroll sometimes writes outside (DLP).
+    if ($sender -in $external -and $rand.NextDouble() -lt 0.25) { $recipients.Add('all-staff@contoso.com') }
+    if ($sender -eq 'payroll@contoso.com' -and $rand.NextDouble() -lt 0.5) { $recipients.Add($external[$rand.Next($external.Count)]) }
+    $subject = $subjects[$rand.Next($subjects.Count)] -f (1000 + $rand.Next(9000))
     $statuses = foreach ($r in $recipients) {
         $s = $rand.NextDouble()
-        if ($r -like '*@wingtiptoys.com' -and $s -lt 0.6) { 'failed' } elseif ($s -lt 0.025) { 'failed' } elseif ($s -lt 0.035) { 'quarantined' } elseif ($s -lt 0.045) { 'filteredAsSpam' } elseif ($s -lt 0.05) { 'pending' } else { 'delivered' }
+        if ($r -like '*@wingtiptoys.com' -and $s -lt 0.6) { 'failed' }                                              # refused by the remote server
+        elseif ($r -eq 'all-staff@contoso.com') { 'failed' }                                                         # delivery restrictions
+        elseif ($subject -like 'Contract*' -and $r -notlike '*@contoso.com' -and $s -lt 0.8) { 'failed' }            # mail flow rule
+        elseif ($sender -eq 'payroll@contoso.com' -and $r -notlike '*@contoso.com' -and $s -lt 0.7) { 'failed' }   # DLP rule
+        elseif ($s -lt 0.025) { 'failed' } elseif ($s -lt 0.035) { 'quarantined' } elseif ($s -lt 0.045) { 'filteredAsSpam' } elseif ($s -lt 0.05) { 'pending' } else { 'delivered' }
     }
     # Working hours, weekdays busier.
     $day = $rand.Next(7)
     $hour = [Math]::Min(23, [Math]::Max(0, [int](8 + $rand.NextDouble() * 10 + ($rand.NextDouble() - 0.5) * 4)))
     $received = [DateTimeOffset]::new($now.UtcDateTime.Date, [TimeSpan]::Zero).AddDays(-$day).AddHours($hour - 2).AddMinutes($rand.Next(60)).AddSeconds($rand.Next(60))
     if ($received -gt $now.AddMinutes(-5)) { $received = $now.AddMinutes(-5 - $rand.Next(600)) }
-    $subject = $subjects[$rand.Next($subjects.Count)] -f (1000 + $rand.Next(9000))
     $g.AddMessage($sender, [string[]]$recipients, $received, $subject, 'delivered', [string[]]$statuses)
 }
 foreach ($t in $g.Rows) { $t.Size = 8000 + ($t.Subject.Length * 911) % 120000; $t.FromIP = if ($t.Sender -like '*@contoso.com') { '' } else { '40.92.' + ($t.Sender.Length % 200) + '.' + ($t.Subject.Length % 250) } }
@@ -94,12 +102,13 @@ try {
     $workPlan = Get-MtrWorkPlan -Store $store -QueryPlan $plan -Period $period -Settings $settings
     $options = [MessageTraceReport.CollectorOptions]::new(); $options.Handler = $g; $options.MaxConcurrency = 3
     $connection = [ordered]@{ Mode = 'Certificate'; Account = 'demo'; Token = 'demo'; ExpiresMs = $now.AddHours(1).ToUnixTimeMilliseconds(); Renew = { @{ Token = 'demo'; ExpiresMs = [DateTimeOffset]::UtcNow.AddHours(1).ToUnixTimeMilliseconds() } } }
-    $run = $store.StartRun('Trace', 'demo', 'demo', '1.0.0', 'demo')
+    $run = $store.StartRun('Trace', 'demo', 'demo', '1.1.0', 'demo')
     $collect = Invoke-MtrCollection -Store $store -Settings $settings -Connection $connection -WorkPlan $workPlan -RunId $run -Options $options 6>$null
     $selection = Select-MtrMessages -Store $store -Filter $filter -Period $period
-    $details = Invoke-MtrDetails -Store $store -Settings $settings -Connection $connection -Items ($store.GetDetailCandidates(60, $true)) -Options $options 6>$null
+    $details = Invoke-MtrDetails -Store $store -Settings $settings -Connection $connection -Items ($store.GetDetailCandidates(90, $true, $true)) -Options $options 6>$null
     [void][IO.Directory]::CreateDirectory($OutputPath)
     $settings.Report.Title = 'Exchange Online message trace'
+    $settings.Details.Enabled = $true
     $report = New-MtrReport -Store $store -Settings $settings -Filter $filter -Period $period -OutputDirectory $OutputPath -QueryPlan $plan
     $store.FinishRun($run, 'Succeeded', 1, $workPlan.Items.Count, $collect.Requests, $collect.Pages, $collect.Rows, $collect.NewDeliveries, 0, $null)
 } finally { $store.Dispose() }

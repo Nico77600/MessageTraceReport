@@ -2,7 +2,7 @@
 //  Message Trace Report - engine, part 2: query planning
 // -----------------------------------------------------------------------------
 //  Author  : Nicolas Fabert
-//  Version : 1.0.0
+//  Version : 1.1.0
 //
 //  What the Graph message trace API really does with $filter (lab, 2026-10-02):
 //    - it keeps ONE value per property (the last one) and combines the properties with AND;

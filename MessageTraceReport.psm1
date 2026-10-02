@@ -15,6 +15,7 @@
         Connection.ps1     Microsoft Graph token: certificate, client secret or interactive sign-in
         Collection.ps1     Runs the Graph queries (engine) with a live progress line
         Report.ps1         SQLite -> CSV / JSON / HTML
+        Route.ps1          Route of a message and reasons of the failures, in the console
         Status.ps1         Database status, retention, lock
 
     Performance-critical work (HTTP, JSON, database, files) is done by the C# engine, compiled on
@@ -22,7 +23,7 @@
 
 .NOTES
     Author  : Nicolas Fabert
-    Version : 1.0.0
+    Version : 1.1.0
     History : see CHANGELOG.md
 #>
 # Strict mode 1.0: uninitialized variables are errors. Not 'Latest': configuration hashtables and token
@@ -31,7 +32,7 @@ Set-StrictMode -Version 1.0
 $ErrorActionPreference = 'Stop'
 
 $script:ToolName = 'Message Trace Report'
-$script:ToolVersion = '1.0.0'
+$script:ToolVersion = '1.1.0'
 $script:ToolAuthor = 'Nicolas Fabert'
 $script:ToolRoot = $PSScriptRoot
 $script:GraphRoot = 'https://graph.microsoft.com/v1.0'
@@ -39,6 +40,6 @@ $script:GraphRoot = 'https://graph.microsoft.com/v1.0'
 $script:TraceServiceAppId = '8bd644d1-64a1-4d4b-ae52-2e0cbf64e373'
 $script:Permission = 'ExchangeMessageTrace.Read.All'
 
-foreach ($file in 'Console', 'Configuration', 'Engine', 'Filter', 'Connection', 'Collection', 'Report', 'Status') {
+foreach ($file in 'Console', 'Configuration', 'Engine', 'Filter', 'Connection', 'Collection', 'Report', 'Route', 'Status') {
     . (Join-Path $PSScriptRoot "src\$file.ps1")
 }

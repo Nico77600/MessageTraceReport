@@ -2,11 +2,12 @@
 <!--
     Message Trace Report - HTML template
     Author  : Nicolas Fabert
-    Version : 1.0.0
+    Version : 1.1.0
     The engine (src\Engine.Report.cs) copies this file and replaces two markers near the end of the
     body (each must appear exactly once):
-      CHUNKS marker : the compressed data blocks (<script type="application/x-mtr-chunk">)
-      META marker   : the report description (period, filters, totals, top lists, timeline) as JSON
+      CHUNKS marker : the compressed data blocks (<script type="application/x-mtr-chunk">), with the
+                      route of the deliveries read (-IncludeDetails), already analysed by the engine
+      META marker   : the report description (period, filters, totals, top lists, timeline, reasons) as JSON
     Everything else is static: edit texts, colours or columns here, no rebuild needed.
 -->
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
@@ -42,8 +43,8 @@ body { margin:0; padding:28px 32px; background:var(--cp-bg); color:var(--cp-text
 h1 { font-size:32px; font-weight:650; letter-spacing:-0.025em; margin:8px 0 12px; }
 h2 { font-size:18px; font-weight:600; margin:0 0 12px; }
 p { line-height:1.5; margin:8px 0; } .muted, small { color:var(--cp-text-muted); }
-header { position:relative; overflow:hidden; border:1px solid var(--cp-border); border-top:4px solid var(--cp-accent); border-radius:16px; padding:24px; margin-bottom:20px; background:linear-gradient(125deg,var(--cp-surface) 35%,var(--cp-accent-soft)); }
-header::before { content:""; position:absolute; width:280px; height:280px; right:-100px; top:-160px; border:40px solid var(--cp-highlight); border-radius:50%; pointer-events:none; }
+body > header { position:relative; overflow:hidden; border:1px solid var(--cp-border); border-top:4px solid var(--cp-accent); border-radius:16px; padding:24px; margin-bottom:20px; background:linear-gradient(125deg,var(--cp-surface) 35%,var(--cp-accent-soft)); }
+body > header::before { content:""; position:absolute; width:280px; height:280px; right:-100px; top:-160px; border:40px solid var(--cp-highlight); border-radius:50%; pointer-events:none; }
 .hero-top { position:relative; display:flex; justify-content:space-between; gap:24px; align-items:flex-start; flex-wrap:wrap; }
 #origin { color:var(--cp-accent); font-size:11px; letter-spacing:0.1em; text-transform:uppercase; font-weight:700; }
 .subtitle { color:var(--cp-text-muted); max-width:720px; }
@@ -101,27 +102,70 @@ a { color:var(--cp-link); } [hidden] { display:none !important; }
 .mono { font-family:Consolas, "Cascadia Mono", monospace; font-size:12px; }
 .pill { display:inline-block; padding:1px 8px; border-radius:999px; font-size:12px; color:var(--cp-text); background:var(--cp-surface-soft); border:1px solid var(--cp-border); }
 .pill::before { content:""; display:inline-block; width:7px; height:7px; border-radius:50%; margin-right:6px; background:var(--dot,var(--cp-gray)); vertical-align:1px; }
+.dot-text::before { content:""; display:inline-block; width:8px; height:8px; border-radius:2px; margin-right:7px; background:var(--dot,var(--cp-gray)); vertical-align:0; }
 #empty { padding:24px; text-align:center; color:var(--cp-text-muted); }
 #loading { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; background:var(--cp-overlay); z-index:10; }
 #loading .box { background:var(--cp-surface); border:1px solid var(--cp-border); border-radius:16px; padding:24px 32px; box-shadow:var(--cp-shadow); min-width:320px; }
 .track { height:6px; border-radius:8px; background:var(--cp-border); margin-top:8px; overflow:hidden; }
 .fill { height:100%; width:0; border-radius:8px; background:var(--cp-accent); transition:width 220ms ease; }
-dialog { border:1px solid var(--cp-border); border-radius:16px; padding:0; background:var(--cp-surface); color:var(--cp-text); width:min(1000px,94vw); box-shadow:var(--cp-shadow); }
+dialog { border:1px solid var(--cp-border); border-radius:16px; padding:0; background:var(--cp-surface); color:var(--cp-text); width:min(1120px,96vw); box-shadow:var(--cp-shadow); }
 dialog::backdrop { background:rgba(0,0,0,0.35); }
 .dialog-head { display:flex; justify-content:space-between; align-items:center; gap:16px; padding:16px 20px; border-bottom:1px solid var(--cp-border); }
-.dialog-body { padding:16px 20px; max-height:72vh; overflow:auto; }
+.dialog-body { padding:16px 20px; max-height:78vh; overflow:auto; }
+h3 { font-size:15px; font-weight:600; margin:20px 0 8px; }
 dl { display:grid; grid-template-columns:150px 1fr; gap:8px 16px; margin:0 0 16px; } dt { color:var(--cp-text-muted); } dd { margin:0; word-break:break-all; }
 table.recipients { width:100%; border-collapse:collapse; font-size:13px; }
 table.recipients th, table.recipients td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--cp-border); vertical-align:top; }
 table.recipients th { font-size:12px; color:var(--cp-text-muted); font-weight:600; }
-.route { margin:6px 0 2px; padding:0; list-style:none; border-left:2px solid var(--cp-accent); }
-.route li { padding:4px 0 6px 12px; position:relative; }
-.route li::before { content:""; position:absolute; left:-6px; top:9px; width:10px; height:10px; border-radius:50%; background:var(--cp-surface); border:2px solid var(--cp-accent); }
+.route { margin:6px 0 2px 6px; padding:0; list-style:none; border-left:2px solid var(--cp-border-strong); }
+.route li { padding:4px 0 8px 14px; position:relative; }
+.route li::before { content:""; position:absolute; left:-7px; top:8px; width:12px; height:12px; border-radius:50%; background:var(--cp-surface); border:3px solid var(--tone,var(--cp-gray)); }
 .route .event { font-weight:600; } .route .when { color:var(--cp-text-muted); font-variant-numeric:tabular-nums; margin-left:8px; font-size:12px; }
-.route .desc { color:var(--cp-text-soft); font-size:12px; white-space:normal; }
-details.raw summary { cursor:pointer; color:var(--cp-text-muted); font-size:12px; } details.raw pre { white-space:pre-wrap; word-break:break-all; font-size:11px; max-height:200px; overflow:auto; background:var(--cp-surface-soft); padding:8px; border-radius:8px; }
+.route .delta { color:var(--cp-text-soft); font-size:11px; margin-left:6px; font-variant-numeric:tabular-nums; }
+.route .help { color:var(--cp-text-muted); font-size:12px; }
+.route .desc { color:var(--cp-text-soft); font-size:12px; white-space:normal; word-break:break-word; }
+details.facts summary { cursor:pointer; color:var(--cp-text-muted); font-size:12px; margin-top:2px; }
+table.facts { font-size:11px; border-collapse:collapse; margin:4px 0; } table.facts td { padding:2px 10px 2px 0; vertical-align:top; word-break:break-all; } table.facts td:first-child { color:var(--cp-text-muted); white-space:nowrap; word-break:normal; }
+.chips { display:flex; flex-wrap:wrap; gap:6px; margin:4px 0 8px; }
+.chip { display:inline-flex; align-items:center; gap:6px; padding:2px 10px 2px 2px; border:1px solid var(--cp-border); border-radius:999px; font-size:12px; background:var(--cp-surface); color:var(--cp-text); text-decoration:none; }
+a:has(> .letter) { text-decoration:none; }
+.letter { display:inline-flex; flex-shrink:0; width:22px; height:22px; border-radius:50%; align-items:center; justify-content:center; background:var(--tone,var(--cp-gray)); color:#fff; font-weight:700; font-size:12px; }
+html[data-theme="dark"] .letter { color:#1a1a1a; }
+.route-group { border:1px solid var(--cp-border); border-left:4px solid var(--tone,var(--cp-gray)); border-radius:12px; padding:12px 14px; margin:10px 0; background:var(--cp-surface); }
+.route-group > header { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+.route-group .who { font-size:12px; color:var(--cp-text-soft); margin:6px 0; word-break:break-all; }
+.route-group .summary { color:var(--cp-text-muted); margin:4px 0; }
+.route-group details > summary { cursor:pointer; font-size:12px; color:var(--cp-text-muted); margin:6px 0 2px; }
+.reason-box { --box:var(--cp-warning); display:flex; gap:14px; border-radius:10px; padding:10px 14px; margin:8px 0; background:color-mix(in srgb,var(--box) 9%,var(--cp-surface)); border:1px solid color-mix(in srgb,var(--box) 45%,var(--cp-border)); }
+.reason-box.danger { --box:var(--cp-danger); }
+.reason-box .code { font:700 15px Consolas, "Cascadia Mono", monospace; color:var(--box); white-space:nowrap; padding-top:1px; }
+.reason-box p { margin:4px 0; font-size:12px; } .reason-box strong { font-size:14px; }
+.reason-box dl { grid-template-columns:130px 1fr; gap:2px 12px; margin:6px 0; font-size:12px; }
+.split { border:1px solid var(--cp-border); border-radius:12px; padding:12px 14px; margin:12px 0; background:var(--cp-surface-soft); }
+.split h3 { margin-top:0; }
+.split-grid { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:16px; }
+.split-col > header { display:flex; gap:8px; align-items:center; margin-bottom:4px; font-weight:600; }
+.reason-panel { border-top:1px solid var(--cp-border); margin-top:16px; padding-top:16px; position:relative; }
+.reason-panel h2 { margin:0 0 4px; font-size:14px; }
+.reasons-title { font-size:13px; margin:14px 0 0; color:var(--cp-text-muted); }
+.cause-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(250px,1fr)); gap:10px; margin:10px 0 4px; }
+.cause-card { display:flex; flex-direction:column; align-items:flex-start; gap:3px; text-align:left; padding:10px 12px; border:1px solid var(--cp-border); border-left:4px solid var(--tone); border-radius:12px; background:var(--cp-surface); }
+.cause-card strong { font-size:14px; color:var(--cp-text); } .cause-card .count { font-size:12px; color:var(--cp-text-muted); font-variant-numeric:tabular-nums; }
+.cause-card small { font-size:11px; color:var(--cp-text-soft); display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+.cause-name { color:var(--box); font-size:15px; } .rule { font-family:Consolas, "Cascadia Mono", monospace; font-size:12px; color:var(--cp-text); margin:2px 0; word-break:break-all; }
+.cause-cell b { display:block; } .cause-cell small { color:var(--cp-text-muted); }
+.cause-badge { font-weight:600; color:var(--tone); }
+.reason-list { list-style:none; margin:8px 0 0; padding:0; display:grid; gap:4px; }
+.reason-list li { display:flex; gap:8px; align-items:center; }
+.reason-item { flex:1; min-width:0; display:flex; justify-content:space-between; gap:12px; text-align:left; font-size:12px; padding:5px 10px; background:linear-gradient(to right,var(--cp-accent-soft) var(--share),var(--cp-surface) var(--share)); }
+.reason-item .why { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.reason-item .why::before { content:""; display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:8px; background:var(--dot); vertical-align:0; }
+.reason-item .count { flex-shrink:0; color:var(--cp-text-muted); font-variant-numeric:tabular-nums; }
+.reason-list a { font-size:12px; white-space:nowrap; }
+.hint { padding:10px 14px; border:1px dashed var(--cp-border-strong); border-radius:0.625rem; color:var(--cp-text-muted); font-size:13px; margin:8px 0; }
+.hint code, .reason-panel code { font-family:Consolas, "Cascadia Mono", monospace; font-size:12px; color:var(--cp-text); }
 footer { color:var(--cp-text-muted); font-size:12px; line-height:1.6; }
-@media (max-width: 900px) { .metrics, .filters { grid-template-columns:repeat(2,minmax(0,1fr)); } .section-row { grid-template-columns:1fr; } }
+@media (max-width: 900px) { .metrics, .filters { grid-template-columns:repeat(2,minmax(0,1fr)); } .section-row, .split-grid { grid-template-columns:1fr; } }
 </style></head><body>
 <div id="loading"><div class="box"><span class="label">Loading report</span><p id="loading-text">Preparing data...</p><div class="track"><div class="fill" id="loading-fill"></div></div></div></div>
 <header><div class="hero-top"><div><span id="origin">Exchange Online / Message trace</span><h1 id="title">Message trace</h1>
@@ -141,15 +185,16 @@ footer { color:var(--cp-text-muted); font-size:12px; line-height:1.6; }
 <section aria-labelledby="top-senders-heading"><h2 id="top-senders-heading">Top 10 senders</h2><p class="caption">By messages. Click to filter the table.</p><ol id="top-senders" class="rank-list"></ol></section>
 <section aria-labelledby="top-recipients-heading"><h2 id="top-recipients-heading">Top 10 recipients</h2><p class="caption">By messages received. Click to filter the table.</p><ol id="top-recipients" class="rank-list"></ol></section>
 </div>
+<div class="reason-panel" id="reason-panel" hidden><h2 id="reasons-heading">Why deliveries were not delivered</h2><p class="caption" id="reasons-caption"></p><div id="causes" class="cause-grid"></div><h3 class="reasons-title" id="reasons-title">Status codes</h3><ol id="reasons" class="reason-list"></ol><p class="hint" id="reasons-hint" hidden></p></div>
 </header>
 <section id="messages"><h2>Messages</h2>
 <p class="caption" id="table-scope"></p>
 <div class="filters">
-<label for="search">Search all fields<input id="search" type="search" placeholder="Address, subject, Message ID..." autocomplete="off"></label>
+<label for="search">Search all fields<input id="search" type="search" placeholder="Address, subject, Message ID, reason..." autocomplete="off"></label>
 <label for="sender-filter">Sender<input id="sender-filter" type="search" placeholder="Address or part of it" autocomplete="off"></label>
 <label for="recipient-filter">Recipient<input id="recipient-filter" type="search" placeholder="Any recipient address" autocomplete="off"></label>
 <label for="subject-filter">Subject<input id="subject-filter" type="search" placeholder="Words in the subject" autocomplete="off"></label>
-<label for="status-filter">Status (any recipient)<select id="status-filter"><option value="">All</option></select></label>
+<label for="status-filter">Status<select id="status-filter"><option value="">All</option></select></label>
 <label for="date-from">From (date)<input id="date-from" type="date"></label>
 <label for="date-to">To (date, included)<input id="date-to" type="date"></label>
 <label for="message-id-filter">Message ID<input id="message-id-filter" type="search" placeholder="Full or partial Message ID" autocomplete="off"></label>
@@ -164,8 +209,9 @@ footer { color:var(--cp-text-muted); font-size:12px; line-height:1.6; }
 </div></section>
 <dialog id="detail"><div class="dialog-head"><h2 id="detail-title" style="margin:0">Message</h2><button id="detail-close" type="button">Close</button></div>
 <div class="dialog-body"><dl id="detail-fields"></dl>
+<div id="detail-routes"></div>
 <div class="controls"><strong id="detail-recipients-title">Recipients</strong><button id="copy-recipients" type="button">Copy recipients</button></div>
-<table class="recipients"><thead><tr><th>Recipient</th><th>Status</th><th>Route</th></tr></thead><tbody id="detail-recipients"></tbody></table>
+<table class="recipients"><thead><tr><th>Recipient</th><th>Status</th><th>Route</th><th>Cause and reason</th></tr></thead><tbody id="detail-recipients"></tbody></table>
 <p class="caption" id="detail-more" hidden></p></div></dialog>
 <noscript>JavaScript is required to display this report. Open the CSV files of the same folder for the complete data.</noscript>
 <footer id="footer"></footer>
@@ -252,6 +298,50 @@ footer { color:var(--cp-text-muted); font-size:12px; line-height:1.6; }
   }
   ranking("top-senders", meta.topSenders || [], v => { el("sender-filter").value = v; applyFilters(); });
   ranking("top-recipients", meta.topRecipients || [], v => { el("recipient-filter").value = v; applyFilters(); });
+
+  // ---- Why deliveries were not delivered (causes and reasons found in the routes read) ---------
+  const CAUSE_TONES = { danger: "var(--cp-danger)", warning: "var(--cp-warning)", spam: "var(--cp-violet)" };
+  const toneOf = t => CAUSE_TONES[t] || "var(--cp-gray)";
+  const filterCause = label => { el("status-filter").value = "@" + label; applyFilters(); el("messages").scrollIntoView({ behavior: "smooth" }); };
+  (function reasons() {
+    const list = meta.reasons || [], causes = meta.causes || [];
+    if (!problems && !list.length) return;
+    el("reason-panel").hidden = false;
+    if (list.length) {
+      el("reasons-caption").textContent = `From the route of ${number(meta.problemRoutes || 0)} of the ${number(meta.problemDeliveries || problems)} deliveries not delivered` +
+        `${(meta.problemRoutes || 0) < (meta.problemDeliveries || problems) ? " (the others were not read: Details.MaxDeliveries, -MaxRoutes)" : ""}. Click a cause or a reason to filter the table.`;
+      for (const [label, tone, deliveries, messages, help] of causes) {
+        const b = document.createElement("button"), name = document.createElement("strong"), count = document.createElement("span"), text = document.createElement("small");
+        b.type = "button"; b.className = "cause-card"; b.style.setProperty("--tone", toneOf(tone)); b.title = help;
+        name.textContent = label; count.className = "count";
+        count.textContent = `${number(deliveries)} deliver${deliveries === 1 ? "y" : "ies"} - ${number(messages)} message${messages === 1 ? "" : "s"}`;
+        text.textContent = help;
+        b.addEventListener("click", () => filterCause(label));
+        b.append(name, count, text); el("causes").append(b);
+      }
+      const first = list[0][5];
+      for (const [reason, component, severity, title, url, deliveries, messages, example, cause, tone] of list) {
+        const li = document.createElement("li"), b = document.createElement("button"), why = document.createElement("span"), count = document.createElement("span");
+        b.type = "button"; b.className = "reason-item"; b.style.setProperty("--share", `${first ? deliveries / first * 100 : 0}%`);
+        b.style.setProperty("--dot", toneOf(tone));
+        why.className = "why";
+        if (cause) { const c = document.createElement("b"); c.textContent = cause; why.append(c, "  "); }
+        why.append(reason + (component ? `  [${component}]` : "")); b.title = [cause, reason, component, title].filter(Boolean).join("\n");
+        count.className = "count"; count.textContent = `${number(deliveries)} deliver${deliveries === 1 ? "y" : "ies"} - ${number(messages)} message${messages === 1 ? "" : "s"}`;
+        b.addEventListener("click", () => { el("search").value = reason; applyFilters(); el("messages").scrollIntoView({ behavior: "smooth" }); });
+        b.append(why, count); li.append(b);
+        if (url) { const a = document.createElement("a"); a.href = url; a.target = "_blank"; a.rel = "noopener noreferrer"; a.textContent = "Learn"; a.title = title || "Microsoft Learn"; li.append(a); }
+        el("reasons").append(li);
+      }
+    } else {
+      el("reasons").hidden = true; el("reasons-title").hidden = true;
+      el("reasons-caption").textContent = `${number(problems)} deliveries were not delivered.`;
+      const hint = el("reasons-hint"); hint.hidden = false;
+      hint.textContent = meta.detailsRequested
+        ? "Their route could not be read (see the console or the log of the run)."
+        : "The message trace gives only their status. Run the report again with -IncludeDetails (or -MaxRoutes 200) to read the route of these deliveries: the cause (blocked by DLP, by a mail flow rule, recipient not found, mailbox full...), the failure code, the rule or component that decided, the remote server, and where the route of a failed recipient left the route of the delivered ones.";
+    }
+  })();
   el("footer").textContent = `Received is the time Exchange Online received the message, shown in ${meta.timeZone}. A delivery is one message for one recipient (what the Microsoft Graph message trace API returns). ` +
     `${meta.htmlTruncated ? `The table holds the ${number(meta.htmlMessages)} newest messages; totals, charts and the CSV files hold all ${number(meta.messages)}. ` : ""}` +
     `Up to ${number(meta.recipientsPerMessage)} recipients are listed per message (problems first); the Deliveries CSV file holds all of them. ` +
@@ -262,6 +352,10 @@ footer { color:var(--cp-text-muted); font-size:12px; line-height:1.6; }
   const T = new Float64Array(total), S = new Int32Array(total), J = new Int32Array(total), N = new Int32Array(total), Z = new Float64Array(total);
   const M = new Array(total), IP = new Array(total), ID = new Array(total), RO = new Int32Array(total + 1);
   const people = [], subjects = [], statusNames = [], routes = new Map();
+  // Per message: the cause and reason shown in the table (worst route), every cause and reason (search, filter), a route read.
+  const REASON = new Array(total).fill(""), WHY = new Array(total).fill(""), REASON_RANK = new Int8Array(total).fill(9), ROUTED = new Uint8Array(total);
+  const CAUSE = new Array(total).fill(""), CAUSE_TONE = new Array(total).fill(""), CAUSES = new Array(total).fill("|");
+  const outcomeRank = o => o === "Failed" ? 0 : o === "Deferred" ? 1 : o === "Dropped" ? 2 : (o || "").startsWith("Delivered to") ? 3 : o === "Expanded" ? 5 : 4;
   let riParts = [], rsParts = [], riLength = 0;
   async function decode(b64) {
     const bin = atob(b64), raw = new Uint8Array(bin.length);
@@ -283,7 +377,18 @@ footer { color:var(--cp-text-muted); font-size:12px; line-height:1.6; }
         T[row] = c.t[i]; S[row] = c.s[i]; J[row] = c.j[i]; N[row] = c.n[i]; Z[row] = c.z[i]; M[row] = c.m[i]; IP[row] = c.ip[i]; ID[row] = c.id[i];
         RO[row + 1] = RO[row] + c.rl[i];
       }
-      for (const x of c.x || []) routes.set(`${first + x[0]}|${x[1]}`, x[2]);
+      for (const x of c.x || []) {
+        const m = first + x[0], r = x[2];
+        routes.set(`${m}|${x[1]}`, r);
+        ROUTED[m] = 1;
+        const cause = r.c ? r.c[1] + (r.c[4] ? ` (${r.c[4]})` : "") : "";
+        for (const text of [cause, r.w]) if (text && !WHY[m].includes(text)) WHY[m] += (WHY[m] ? " | " : "") + text;
+        if (r.c && !CAUSES[m].includes(`|${r.c[1]}|`)) CAUSES[m] += `${r.c[1]}|`;
+        if (r.c || r.w) {
+          const rank = outcomeRank(r.o);
+          if (rank < REASON_RANK[m]) { REASON_RANK[m] = rank; REASON[m] = r.w; CAUSE[m] = r.c ? r.c[1] : ""; CAUSE_TONE[m] = r.c ? r.c[2] : ""; }
+        }
+      }
       riParts.push(Int32Array.from(c.ri)); rsParts.push(Int32Array.from(c.rs)); riLength += c.ri.length;
       el("loading-text").textContent = `Loading ${number(row)} of ${number(total)} messages...`;
       el("loading-fill").style.width = `${total ? row / total * 100 : 100}%`;
@@ -299,16 +404,30 @@ footer { color:var(--cp-text-muted); font-size:12px; line-height:1.6; }
 
   // Status of a message: the status of its recipients, or "Mixed" (worst first).
   const SUM = new Int32Array(total);   // index of the worst status in statusNames, -1 = mixed handled below
-  const MIXED = new Uint8Array(total);
+  const MIXED = new Uint8Array(total), PARTIAL = new Uint8Array(total);   // PARTIAL: delivered AND not delivered recipients
   for (let i = 0; i < total; i++) {
-    let worst = -1, same = true;
+    let worst = -1, same = true, good = false, bad = false;
     for (let k = RO[i]; k < RO[i + 1]; k++) {
       const s = RS[k];
+      if (isProblem(statusNames[s])) bad = true; else good = true;
       if (worst < 0) worst = s; else { if (s !== worst) same = false; if ((RANK[statusNames[s]] ?? 5) < (RANK[statusNames[worst]] ?? 5)) worst = s; }
     }
-    SUM[i] = worst; MIXED[i] = same ? 0 : 1;
+    SUM[i] = worst; MIXED[i] = same ? 0 : 1; PARTIAL[i] = good && bad ? 1 : 0;
   }
-  for (const name of statusNames.slice().sort()) { const o = document.createElement("option"); o.value = name; o.textContent = name; el("status-filter").append(o); }
+  {
+    const byStatus = document.createElement("optgroup"); byStatus.label = "Any recipient with the status";
+    for (const name of statusNames.slice().sort()) { const o = document.createElement("option"); o.value = name; o.textContent = name; byStatus.append(o); }
+    const group = document.createElement("optgroup"); group.label = "Message";
+    for (const [value, text] of [["!problem", "Any recipient not delivered"], ["!partial", "Partly delivered (delivered + not delivered)"], ["!route", "Route read (-IncludeDetails)"]]) {
+      const o = document.createElement("option"); o.value = value; o.textContent = text; group.append(o);
+    }
+    el("status-filter").append(byStatus, group);
+    if ((meta.causes || []).length) {
+      const byCause = document.createElement("optgroup"); byCause.label = "Any recipient with the cause (routes read)";
+      for (const [label, , deliveries] of meta.causes) { const o = document.createElement("option"); o.value = "@" + label; o.textContent = `${label} (${number(deliveries)})`; byCause.append(o); }
+      el("status-filter").append(byCause);
+    }
+  }
 
   // ---- Columns ---------------------------------------------------------------------
   const statusText = i => SUM[i] < 0 ? "" : (MIXED[i] ? `${statusNames[SUM[i]]} (mixed)` : statusNames[SUM[i]]);
@@ -317,11 +436,13 @@ footer { color:var(--cp-text-muted); font-size:12px; line-height:1.6; }
     { title: "Sender", width: "minmax(150px,1fr)", cell: i => people[S[i]] },
     { title: "Recipients", width: "minmax(150px,1fr)", cell: i => recipientsPreview(i) },
     { title: "Count", width: "64px", cls: "num", cell: i => number(N[i]) },
-    { title: "Status", width: "150px", pill: true, cell: i => statusText(i) },
+    { title: "Status", width: "176px", pill: true, cell: i => statusText(i) },
     { title: "Subject", width: "minmax(180px,1.6fr)", cell: i => subjects[J[i]] },
     { title: "Size", width: "76px", cls: "num", cell: i => bytes(Z[i]) },
     { title: "Message ID", width: "minmax(140px,1fr)", cls: "mono", cell: i => M[i] }
   ];
+  // Cause column (Blocked by DLP, Recipient not found...): only when routes were read; the status code in its tooltip.
+  if (meta.routes) columns.splice(5, 0, { title: "Cause", width: "minmax(170px,1.1fr)", dot: i => CAUSE[i] ? toneOf(CAUSE_TONE[i]) : "", tip: i => [CAUSE[i], REASON[i]].filter(Boolean).join("\n"), cell: i => CAUSE[i] });
   document.documentElement.style.setProperty("--columns", columns.map(c => c.width).join(" "));
   for (const c of columns) { const d = document.createElement("div"); d.textContent = c.title; if (c.cls) d.className = c.cls; el("grid-head").append(d); }
   function recipientsPreview(i) { const n = RO[i + 1] - RO[i]; if (!n) return ""; const first = people[RI[RO[i]]]; return N[i] > 1 ? `${first} (+${N[i] - 1})` : first; }
@@ -335,11 +456,18 @@ footer { color:var(--cp-text-muted); font-size:12px; line-height:1.6; }
     const subject = el("subject-filter").value.trim(), messageId = el("message-id-filter").value.trim().toLowerCase(), status = el("status-filter").value;
     const from = dayStart(el("date-from").value), toStart = dayStart(el("date-to").value), to = toStart == null ? null : toStart + 86400;
     const senderMask = sender ? mask(people, sender) : null, recipientMask = recipient ? mask(people, recipient) : null, subjectMask = subject ? mask(subjects, subject) : null;
-    const statusIndex = status ? statusNames.indexOf(status) : -1;
+    const statusIndex = status && status[0] !== "!" && status[0] !== "@" ? statusNames.indexOf(status) : -1;
     let searchPeople = null, searchSubject = null; const q = search.toLowerCase();
     if (search) { searchPeople = mask(people, search); searchSubject = mask(subjects, search); }
     const hasPerson = (i, m) => { for (let k = RO[i]; k < RO[i + 1]; k++) if (m[RI[k]]) return true; return false; };
-    const hasStatus = i => { for (let k = RO[i]; k < RO[i + 1]; k++) if (RS[k] === statusIndex) return true; return false; };
+    const causeKey = status && status[0] === "@" ? `|${status.slice(1)}|` : "";
+    const hasStatus = i => {
+      if (causeKey) return CAUSES[i].includes(causeKey);
+      if (status === "!problem") { for (let k = RO[i]; k < RO[i + 1]; k++) if (isProblem(statusNames[RS[k]])) return true; return false; }
+      if (status === "!partial") return PARTIAL[i] === 1;
+      if (status === "!route") return ROUTED[i] === 1;
+      for (let k = RO[i]; k < RO[i + 1]; k++) if (RS[k] === statusIndex) return true; return false;
+    };
     const out = new Int32Array(total); let n = 0;
     for (let i = 0; i < total; i++) {
       if (senderMask && !senderMask[S[i]]) continue;
@@ -349,7 +477,7 @@ footer { color:var(--cp-text-muted); font-size:12px; line-height:1.6; }
       if (messageId && !(M[i] || "").toLowerCase().includes(messageId)) continue;
       if (status && !hasStatus(i)) continue;
       if (recipientMask && !hasPerson(i, recipientMask)) continue;
-      if (search && !(searchPeople[S[i]] || searchSubject[J[i]] || (M[i] || "").toLowerCase().includes(q) || hasPerson(i, searchPeople))) continue;
+      if (search && !(searchPeople[S[i]] || searchSubject[J[i]] || (M[i] || "").toLowerCase().includes(q) || WHY[i].toLowerCase().includes(q) || hasPerson(i, searchPeople))) continue;
       out[n++] = i;
     }
     view = out.slice(0, n);
@@ -383,8 +511,9 @@ footer { color:var(--cp-text-muted); font-size:12px; line-height:1.6; }
       for (const c of columns) {
         const cell = document.createElement("div"), text = c.cell(i);
         if (c.pill && text) { const s = document.createElement("span"); s.className = "pill"; s.style.setProperty("--dot", colorOf(statusNames[SUM[i]])); s.textContent = text; cell.append(s); }
+        else if (c.dot && text) { const s = document.createElement("span"); s.className = "dot-text"; s.style.setProperty("--dot", c.dot(i)); s.textContent = text; cell.append(s); }
         else cell.textContent = text;
-        cell.title = text; if (c.cls) cell.className = c.cls; line.append(cell);
+        cell.title = c.tip ? c.tip(i) : text; if (c.cls) cell.className = c.cls; line.append(cell);
       }
       fragment.append(line);
     }
@@ -394,39 +523,180 @@ footer { color:var(--cp-text-muted); font-size:12px; line-height:1.6; }
   viewport.addEventListener("scroll", () => { if (!ticking) { ticking = true; requestAnimationFrame(() => { render(false); ticking = false; }); } });
   window.addEventListener("resize", () => render(false));
 
-  // ---- Details dialog: fields, recipients with status and route ---------------------------
+  // ---- Details dialog: fields, routes grouped by recipient, where they split, recipients ------------
+  const TONES = { success: "var(--cp-success)", danger: "var(--cp-danger)", warning: "var(--cp-warning)", info: "var(--cp-link)", neutral: "var(--cp-gray)" };
+  const h = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+  const clock = s => stamp(s).slice(11);
+  const delta = s => s < 60 ? `+${Math.round(s)} s` : s < 3600 ? `+${Math.floor(s / 60)} min ${pad(Math.round(s % 60))} s` : `+${Math.floor(s / 3600)} h ${pad(Math.floor(s % 3600 / 60))} min`;
+  const stepName = e => e[1] + (e[2] ? ` (${e[2]})` : "");
+  const failing = r => r && r[1] && r[1][0] !== "2";
+  const toneOfGroup = g => g.status === "Failed" || g.route.o === "Failed" ? TONES.danger : isProblem(g.status) ? TONES.warning : TONES.success;
+  const pillOf = status => { const p = h("span", "pill", status); p.style.setProperty("--dot", colorOf(status)); return p; };
+  const letterOf = g => { const l = h("span", "letter", g.letter); l.style.setProperty("--tone", toneOfGroup(g)); return l; };
+
+  // Why the route ended as it did: the cause (and the rule), what it means, then the status code, Learn
+  // meaning, component, remote server, detail and Learn page.
+  function reasonBox(route) {
+    const r = route.r, c = route.c;
+    if (!failing(r) && !route.w && !c) return null;
+    const box = h("div", "reason-box" + (route.o === "Failed" || (r && r[4] === "Permanent") ? " danger" : ""));
+    if (c) box.style.setProperty("--box", toneOf(c[2]));
+    const body = h("div");
+    if (c) {
+      body.append(h("strong", "cause-name", c[1]));
+      if (c[4]) body.append(h("p", "rule", c[4][0].toUpperCase() + c[4].slice(1)));
+      body.append(h("p", null, c[3]));
+    }
+    if (failing(r)) {
+      box.prepend(h("div", "code", `${r[0]} ${r[1]}`.trim()));
+      const dl = h("dl");
+      const add = (k, v) => { if (v) dl.append(h("dt", null, k), h("dd", null, v)); };
+      add("Server text", r[2] || "(none)");
+      add("Code meaning", r[9]);
+      add("Type", r[4] === "Permanent" ? "Permanent failure (5.x.x): the sender receives a non-delivery report" : r[4] === "Temporary" ? "Temporary (4.x.x): Exchange Online keeps retrying, the message fails if it does not get through in time" : r[4]);
+      add("Decided by", r[8]);
+      add("Remote server", [r[5], r[6]].filter(Boolean).join("  "));
+      add("Remote answer", r[7]);
+      add("Diagnostic", r[3]);
+      body.append(dl);
+      if (r[10]) { const a = h("a", null, "Microsoft Learn: what this code means and how to fix it"); a.href = r[10]; a.target = "_blank"; a.rel = "noopener noreferrer"; body.append(a); }
+    } else {
+      box.prepend(h("div", "code", "!"));
+      if (!c) body.append(h("strong", null, route.w));
+      if (route.w && c) body.append(h("p", "muted", route.w));
+    }
+    box.append(body);
+    return box;
+  }
+
+  // Steps of a route (from step 'from'): time, time since the first step, event, what it means, facts.
+  function stepsOf(route, from = 0) {
+    const ol = h("ol", "route"), t0 = route.e.length ? route.e[0][0] : 0;
+    for (const e of route.e.slice(from)) {
+      const li = h("li"); li.style.setProperty("--tone", TONES[e[5]] || TONES.neutral);
+      const head = h("div"); head.append(h("span", "event", stepName(e)), h("span", "when", clock(e[0])), h("span", "delta", delta(e[0] - t0)));
+      li.append(head);
+      if (e[6]) li.append(h("div", "help", e[6]));
+      if (e[3] && e[3] !== e[6]) li.append(h("div", "desc", e[3]));
+      const facts = e[8] || [];
+      if (facts.length) {
+        const d = h("details", "facts"), table = h("table", "facts");
+        d.append(h("summary", null, `${facts.length / 2} detail${facts.length > 2 ? "s" : ""}`));
+        for (let k = 0; k < facts.length; k += 2) { const tr = h("tr"); tr.append(h("td", null, facts[k]), h("td", null, facts[k + 1])); table.append(tr); }
+        d.append(table); li.append(d);
+      }
+      ol.append(li);
+    }
+    return ol;
+  }
+
+  function groupCard(g, open) {
+    const card = h("article", "route-group"); card.id = `route-${g.letter}`; card.style.setProperty("--tone", toneOfGroup(g));
+    const head = h("header");
+    head.append(letterOf(g), pillOf(g.status));
+    if (g.route.c) { const b = h("span", "cause-badge", g.route.c[1]); b.style.setProperty("--tone", toneOf(g.route.c[2])); head.append(b); }
+    else if (g.route.o && g.route.o !== g.status) head.append(h("span", null, g.route.o));
+    head.append(h("span", "muted", `${number(g.people.length)} recipient${g.people.length === 1 ? "" : "s"}`));
+    card.append(head);
+    const shown = g.people.slice(0, 12);
+    card.append(h("p", "who", shown.join("; ") + (g.people.length > shown.length ? `; +${number(g.people.length - shown.length)}` : "")));
+    const seconds = g.route.e.length ? g.route.e[g.route.e.length - 1][0] - g.route.e[0][0] : 0;
+    card.append(h("p", "summary mono", `${g.route.m}  -  ${delta(seconds).slice(1)}${g.route.sv ? "  -  last server " + g.route.sv : ""}`));
+    const box = reasonBox(g.route); if (box) card.append(box);
+    const d = h("details"); d.open = open;
+    d.append(h("summary", null, `Steps (${g.route.e.length})`), stepsOf(g.route));
+    card.append(d);
+    return card;
+  }
+
+  // Where the route of a recipient not delivered left the route of a delivered one.
+  function splitView(a, b) {
+    let n = 0;
+    while (n < a.route.e.length && n < b.route.e.length && a.route.e[n][1] === b.route.e[n][1] && a.route.e[n][2] === b.route.e[n][2]) n++;
+    const wrap = h("section", "split");
+    wrap.append(h("h3", null, "Where the routes split"));
+    wrap.append(h("p", "caption", n
+      ? `Route ${a.letter} and route ${b.letter} are the same up to ${stepName(a.route.e[n - 1])} (${clock(a.route.e[n - 1][0])}): ${a.route.e.slice(0, n).map(stepName).join(" > ")}. Then:`
+      : `Route ${a.letter} and route ${b.letter} differ from the first step.`));
+    const grid = h("div", "split-grid");
+    for (const g of [a, b]) {
+      const col = h("div", "split-col"), head = h("header");
+      head.append(letterOf(g), pillOf(g.status));
+      if (g.route.c) { const b = h("span", "cause-badge", g.route.c[1]); b.style.setProperty("--tone", toneOf(g.route.c[2])); head.append(b); }
+      head.append(h("span", "muted", g.people.length === 1 ? g.people[0] : `${number(g.people.length)} recipients`));
+      col.append(head);
+      if (n < g.route.e.length) col.append(stepsOf(g.route, n)); else col.append(h("p", "muted", "No other step."));
+      grid.append(col);
+    }
+    wrap.append(grid);
+    return wrap;
+  }
+
   function showDetails(i) {
     const fields = [["Received", `${stamp(T[i])} (${meta.timeZone})`], ["Sender", people[S[i]]], ["Subject", subjects[J[i]]], ["Status", statusText(i)],
       ["Recipients", number(N[i])], ["Size", `${bytes(Z[i])} (${number(Z[i])} bytes)`], ["Message ID", M[i]], ["From IP", IP[i] || "-"], ["Message trace ID", ID[i]]];
+    if (REASON[i]) fields.splice(4, 0, ["Reason", REASON[i]]);
+    if (CAUSE[i]) fields.splice(4, 0, ["Cause", CAUSE[i]]);
     const dl = el("detail-fields"); dl.replaceChildren();
     for (const [k, v] of fields) { const dt = document.createElement("dt"), dd = document.createElement("dd"); dt.textContent = k; dd.textContent = v; dl.append(dt, dd); }
-    const body = el("detail-recipients"); body.replaceChildren();
     const list = [];
     for (let k = RO[i]; k < RO[i + 1]; k++) list.push([RI[k], RS[k]]);
     list.sort((a, b) => (RANK[statusNames[a[1]]] ?? 5) - (RANK[statusNames[b[1]]] ?? 5) || (people[a[0]] < people[b[0]] ? -1 : 1));
+
+    // Recipients grouped by identical route (same status, steps and reason): problems first.
+    const groups = [], bySignature = new Map(), letterOfPerson = new Map();
     for (const [p, s] of list) {
-      const tr = document.createElement("tr"), a = document.createElement("td"), st = document.createElement("td"), route = document.createElement("td");
-      a.textContent = people[p];
-      const pill = document.createElement("span"); pill.className = "pill"; pill.style.setProperty("--dot", colorOf(statusNames[s])); pill.textContent = statusNames[s]; st.append(pill);
-      const events = routes.get(`${i}|${p}`);
-      if (events) {
-        const ol = document.createElement("ol"); ol.className = "route";
-        for (const e of events) {
-          const li = document.createElement("li"), ev = document.createElement("span"), when = document.createElement("span"), desc = document.createElement("div");
-          ev.className = "event"; ev.textContent = e[1] + (e[2] ? ` (${e[2]})` : ""); when.className = "when"; when.textContent = stamp(e[0]);
-          desc.className = "desc"; desc.textContent = e[3] || ""; li.append(ev, when, desc);
-          if (e[4]) { const d = document.createElement("details"); d.className = "raw"; const sm = document.createElement("summary"); sm.textContent = "Data"; const pre = document.createElement("pre"); pre.textContent = e[4]; d.append(sm, pre); li.append(d); }
-          ol.append(li);
-        }
-        route.append(ol);
-      } else { route.className = "muted"; route.textContent = "-"; }
-      tr.append(a, st, route); body.append(tr);
+      const r = routes.get(`${i}|${p}`); if (!r) continue;
+      const key = statusNames[s] + "|" + r.g;
+      let g = bySignature.get(key);
+      if (!g) { g = { status: statusNames[s], route: r, people: [] }; bySignature.set(key, g); groups.push(g); }
+      g.people.push(people[p]);
+    }
+    groups.sort((x, y) => (isProblem(x.status) ? 0 : 1) - (isProblem(y.status) ? 0 : 1) || outcomeRank(x.route.o) - outcomeRank(y.route.o) || y.people.length - x.people.length);
+    groups.forEach((g, k) => { g.letter = String.fromCharCode(65 + Math.min(k, 25)); for (const p of g.people) letterOfPerson.set(p, g); });
+
+    const box = el("detail-routes"); box.replaceChildren();
+    const notRead = list.filter(([p]) => !routes.has(`${i}|${p}`));
+    if (groups.length) {
+      box.append(h("h3", null, groups.length === 1 ? "Route" : `Routes (${groups.length} different)`));
+      const chips = h("div", "chips");
+      for (const g of groups) {
+        const c = h("a", "chip"); c.href = `#route-${g.letter}`;
+        c.append(letterOf(g), document.createTextNode(`${g.route.c ? g.route.c[1] : g.route.o || g.status} - ${number(g.people.length)} recipient${g.people.length === 1 ? "" : "s"}`));
+        c.addEventListener("click", ev => { ev.preventDefault(); el(`route-${g.letter}`).scrollIntoView({ behavior: "smooth", block: "start" }); });
+        chips.append(c);
+      }
+      box.append(chips);
+      const bad = groups.filter(g => isProblem(g.status)), good = groups.filter(g => g.status === "Delivered");
+      if (bad.length && good.length) box.append(splitView(bad[0], good[0]));
+      for (const g of groups) box.append(groupCard(g, isProblem(g.status) || groups.length === 1));
+      if (notRead.length) box.append(h("p", "caption", `Route not read for ${number(notRead.length)} recipient${notRead.length === 1 ? "" : "s"} (Details.MaxDeliveries, -MaxRoutes, Details.OnlyProblems).`));
+    } else if (list.some(([, s]) => isProblem(statusNames[s]))) {
+      box.append(h("p", "hint", "Route not read for this message. Run the report again with -IncludeDetails (for one message: -MessageId '<id>' -IncludeDetails) to see why the recipients were not delivered and where their route left the route of the others."));
+    }
+
+    const body = el("detail-recipients"); body.replaceChildren();
+    for (const [p, s] of list) {
+      const tr = h("tr"), a = h("td", null, people[p]), st = h("td"), rt = h("td"), why = h("td");
+      st.append(pillOf(statusNames[s]));
+      const g = letterOfPerson.get(people[p]);
+      if (g) {
+        const link = h("a"); link.href = `#route-${g.letter}`; link.append(letterOf(g));
+        link.addEventListener("click", ev => { ev.preventDefault(); el(`route-${g.letter}`).scrollIntoView({ behavior: "smooth", block: "start" }); });
+        rt.append(link);
+        why.className = "cause-cell";
+        if (g.route.c) { const b = h("b", "cause-badge", g.route.c[1]); b.style.setProperty("--tone", toneOf(g.route.c[2])); why.append(b); }
+        const detail = g.route.w || (g.route.o && g.route.o !== statusNames[s] ? g.route.o : "");
+        if (detail) why.append(h("small", null, detail));
+      } else { rt.className = "muted"; rt.textContent = "-"; }
+      tr.append(a, st, rt, why); body.append(tr);
     }
     el("detail-recipients-title").textContent = `Recipients (${number(N[i])})`;
     const more = N[i] - list.length; el("detail-more").hidden = more <= 0;
     el("detail-more").textContent = `${number(more)} more recipient(s) in the Deliveries CSV file (Report.HtmlRecipientsPerMessage).`;
     el("copy-recipients").onclick = () => navigator.clipboard && navigator.clipboard.writeText(list.map(x => people[x[0]]).join("; "));
     el("detail").showModal();
+    el("detail").querySelector(".dialog-body").scrollTop = 0;
   }
   spacer.addEventListener("click", e => { const r = e.target.closest(".grid-row"); if (r) showDetails(Number(r.dataset.row)); });
   spacer.addEventListener("keydown", e => { if (e.key === "Enter") { const r = e.target.closest(".grid-row"); if (r) showDetails(Number(r.dataset.row)); } });
@@ -435,11 +705,11 @@ footer { color:var(--cp-text-muted); font-size:12px; line-height:1.6; }
   // ---- Export of the current view -------------------------------------------------------------
   el("export").addEventListener("click", () => {
     const esc = v => { v = v == null ? "" : String(v); if (/^[=+\-@\t\r]/.test(v)) v = "'" + v; return /[";\r\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v; };
-    const header = [`Received (${meta.timeZone})`, "Sender", "Recipients", "Recipient count", "Status", "Subject", "Size (bytes)", "Message ID", "From IP", "Message trace ID"];
+    const header = [`Received (${meta.timeZone})`, "Sender", "Recipients", "Recipient count", "Status", "Subject", "Size (bytes)", "Message ID", "From IP", "Message trace ID", "Cause", "Reason"];
     const parts = ["\ufeff" + header.map(esc).join(";") + "\r\n"]; let buffer = [];
     for (const i of view) {
       const rec = []; for (let k = RO[i]; k < RO[i + 1]; k++) rec.push(people[RI[k]]);
-      buffer.push([stamp(T[i]), people[S[i]], rec.join("; "), N[i], statusText(i), subjects[J[i]], Z[i], M[i], IP[i], ID[i]].map(esc).join(";"));
+      buffer.push([stamp(T[i]), people[S[i]], rec.join("; "), N[i], statusText(i), subjects[J[i]], Z[i], M[i], IP[i], ID[i], CAUSE[i], REASON[i]].map(esc).join(";"));
       if (buffer.length === 5000) { parts.push(buffer.join("\r\n") + "\r\n"); buffer = []; }
     }
     if (buffer.length) parts.push(buffer.join("\r\n") + "\r\n");

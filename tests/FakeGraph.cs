@@ -2,7 +2,7 @@
 //  Message Trace Report - tests: in-memory Microsoft Graph message trace API
 // -----------------------------------------------------------------------------
 //  Author  : Nicolas Fabert
-//  Version : 1.0.0
+//  Version : 1.1.0
 //
 //  An HttpMessageHandler given to the engine (CollectorOptions.Handler). It answers like the real
 //  API measured in the lab on 2026-10-02:
@@ -11,7 +11,8 @@
 //    - '*@domain' matches a domain; subject: eq, contains, startswith, endswith (case-insensitive);
 //    - newest first; $top 1-5000 (default 1000); @odata.nextLink with $skiptoken;
 //    - receivedDateTime: both bounds required ('ge' and 'le'), at most 10 days, not older than 90 days;
-//    - getDetailsByRecipient: two events per delivery.
+//    - getDetailsByRecipient: the events of the real routes (Receive, Submit, Deliver, Fail, Defer, Spam,
+//      Expand, Drop, DLP rule) with their XML data, per status (see Route).
 //  Failures can be injected: 429 (Retry-After), 401, 500, 403, missing service principal.
 // =============================================================================
 using System;
@@ -62,6 +63,76 @@ namespace MtrTests
             return new HttpResponseMessage(code) { Content = new StringContent(json, Encoding.UTF8, "application/json") };
         }
 
+        static string Mep(params string[] pairs)
+        {
+            var sb = new StringBuilder("<root>");
+            for (int i = 0; i + 2 < pairs.Length; i += 3) sb.Append("<MEP Name=\"" + pairs[i] + "\" " + pairs[i + 1] + "=\"" + WebUtility.HtmlEncode(pairs[i + 2]) + "\" />");
+            return sb.Append("</root>").ToString();
+        }
+
+        /// <summary>
+        /// Route of one delivery, shaped like the real events (lab, 2026-10-02): delivered, failed (recipient
+        /// 'dlp*' or sender 'payroll*': blocked by a DLP rule, the Fail returned BEFORE the rule within the same
+        /// second, as the service does; 'all-staff*': delivery restrictions; 'etr*' or subject 'Contract':
+        /// rejected by a mail flow rule; *@wingtiptoys.com: refused by the remote server; others: 5.1.10),
+        /// pending (Defer 4.4.317), quarantined (Spam + Deliver to the quarantine), filtered as spam (Junk
+        /// Email folder), expanded (Expand DL + Drop 2.1.5).
+        /// </summary>
+        public static List<object> Route(FakeTrace t)
+        {
+            var list = new List<object>();
+            Action<int, string, string, string, string> add = (seconds, ev, action, description, data) =>
+                list.Add(new { id = t.Id, messageId = t.MessageId, dateTime = t.Received.AddSeconds(seconds).UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture), @event = ev, action = action, description = description, data = data });
+            add(0, "Receive", "", "Message received by: EXCH01.contoso.com", Mep("ConnectorId", "String", "EXCH01\\Default EXCH01", "ClientIP", "String", "10.0.0.1", "ServerHostName", "String", "EXCH01.contoso.com",
+                "CustomData", "Blob", "S:ProxyHop1=EOP01.mail.protection.outlook.com(10.1.1.1);S:tlsversion=SP_PROT_TLS1_3_SERVER;S:tlscipher=CALG_AES_256", "SequenceNumber", "Long", "0"));
+            switch (t.Status)
+            {
+                case "quarantined":
+                    add(5, "Spam", "Quarantine", "Spam confidence level: 8", Mep("SourceContext", "String", "AgentDefer - Antispam Quarantine Agent", "DI", "String", "SQ", "SCL", "Integer", "8", "SFV", "String", "SPM", "CIP", "String", "192.0.2.25"));
+                    add(6, "Deliver", "", "The message was successfully delivered to the folder: DefaultFolderType:QuarantinedEmailSecured", Mep("MailboxServer", "String", "MBX01.contoso.com", "RecipientStatus", "String", "DefaultFolderType:QuarantinedEmailSecured-Mailbox Delivery Filter Agent"));
+                    return list;
+                case "filteredAsSpam":
+                    add(4, "Spam", "", "Spam confidence level: 6", Mep("DI", "String", "SJ", "SCL", "Integer", "6", "SFV", "String", "SPM", "CIP", "String", "192.0.2.25"));
+                    add(5, "Deliver", "", "The message was successfully delivered to the folder: DefaultFolderType:JunkEmail", Mep("MailboxServer", "String", "MBX01.contoso.com"));
+                    return list;
+            }
+            add(1, "Submit", "", "The message was submitted.", Mep("RcptCount", "Integer", "3", "ServerHostName", "String", "EXCH01.contoso.com"));
+            switch (t.Status)
+            {
+                case "failed":
+                    if (t.Recipient.StartsWith("dlp", StringComparison.OrdinalIgnoreCase) || t.Sender.StartsWith("payroll", StringComparison.OrdinalIgnoreCase))
+                    {
+                        add(2, "Fail", "", "Reason: [{LED=550 5.7.171 Delivery not authorized, message refused};{MSG=};{FQDN=};{IP=};{LRT=}]", Mep("ServerHostName", "String", "EXCH02.contoso.com", "SourceContext", "String", "DLP Policy Agent"));
+                        add(2, "DLP rule", "BA", "DLP rule: 'Block credit cards', ID: ('f43f7263-2730-4217-aea6-e7a68a7951ec'), DLP policy: 'Financial data', ID: (0b6c9a2e-1d3f-4e5a-9b7c-8d6e5f4a3b2c).", Mep("RcptCount", "Integer", "1", "SourceContext", "String", "CatContentConversion"));
+                    }
+                    else if (t.Recipient.StartsWith("all-staff", StringComparison.OrdinalIgnoreCase))
+                        add(2, "Fail", "", "Reason: [{LED=550 5.7.1 RESOLVER.RST.NotAuthorized; not authorized};{MSG=};{FQDN=};{IP=};{LRT=}]", Mep("ServerHostName", "String", "EXCH02.contoso.com"));
+                    else if (t.Recipient.StartsWith("etr", StringComparison.OrdinalIgnoreCase) || (t.Subject ?? "").IndexOf("Contract", StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        add(2, "Transport rule", "", "Transport rule: 'Block external contracts', ID: ('9d0c4b1e-7a2f-4c3d-8e5b-6f1a2b3c4d5e'), DLP policy: '', ID: (00000000-0000-0000-0000-000000000000).", Mep("RcptCount", "Integer", "1", "SourceContext", "String", "Transport Rule Agent"));
+                        add(2, "Fail", "", "Reason: [{LED=550 5.7.1 TRANSPORT.RULES.RejectMessage; the message was rejected by organization policy};{MSG=};{FQDN=};{IP=};{LRT=}]", Mep("ServerHostName", "String", "EXCH02.contoso.com", "SourceContext", "String", "Transport Rule Agent"));
+                    }
+                    else if (t.Recipient.EndsWith("@wingtiptoys.com", StringComparison.OrdinalIgnoreCase))
+                    {
+                        add(2, "Send external", "", "Message sent to mx.wingtiptoys.com at 203.0.113.5 using TLS1.2", Mep("ServerHostName", "String", "EXCH02.contoso.com"));
+                        add(3, "Fail", "", "Reason: [{LED=550 5.1.1 <" + t.Recipient + ">: Recipient address rejected: User unknown in virtual mailbox table};{MSG=550 5.1.1 User unknown};{FQDN=mx.wingtiptoys.com};{IP=203.0.113.5};{LRT=}]", Mep("ServerHostName", "String", "EXCH02.contoso.com", "IsSmtpResponseFromExternalServer", "String", "True"));
+                    }
+                    else add(2, "Fail", "", "Reason: [{LED=550 5.1.10 RESOLVER.ADR.RecipientNotFound; Recipient not found by SMTP address lookup};{MSG=};{FQDN=};{IP=};{LRT=}]", Mep("ServerHostName", "String", "EXCH02.contoso.com"));
+                    break;
+                case "pending":
+                    add(130, "Defer", "", "Reason: [{LED=450 4.4.317 Cannot connect to remote server [Message=SocketError: TimedOut] [LastAttemptedServerName=mx.fabrikam.com] [LastAttemptedIP=192.0.2.10:25]};{MSG=};{FQDN=mx.fabrikam.com};{IP=192.0.2.10};{LRT=}]", Mep("ServerHostName", "String", "EXCH02.contoso.com"));
+                    break;
+                case "expanded":
+                    add(1, "Expand DL", "", "The message was sent to a distribution list (DL) that was expanded to the recipients of the DL.", Mep("RcptCount", "Integer", "4"));
+                    add(1, "Drop", "", "Reason: [{LED=250 2.1.5 RESOLVER.GRP.Expanded; distribution list expanded};{MSG=};{FQDN=};{IP=};{LRT=}]", Mep("SourceContext", "String", "CatCleanup"));
+                    break;
+                default:
+                    add(2, "Deliver", "", "The message was successfully delivered.", Mep("MailboxServer", "String", "MBX01.contoso.com", "TotalLatency", "Integer", "2"));
+                    break;
+            }
+            return list;
+        }
+
         static HttpResponseMessage Error(HttpStatusCode code, string message)
         {
             return Json(code, JsonSerializer.Serialize(new { error = new { code = code == HttpStatusCode.BadRequest ? "BadRequest" : "Error", message = message } }));
@@ -89,10 +160,7 @@ namespace MtrTests
                 string id = detail.Groups[1].Value, rcpt = detail.Groups[2].Value.Replace("''", "'");
                 FakeTrace t = Rows.FirstOrDefault(x => x.Id == id && string.Equals(x.Recipient, rcpt, StringComparison.OrdinalIgnoreCase));
                 if (t == null) return Json(HttpStatusCode.OK, "{\"value\":[]}");
-                var events = new[] {
-                    new { id = t.Id, messageId = t.MessageId, dateTime = t.Received.UtcDateTime.ToString("o"), @event = "Receive", action = "", description = "Message received by: EXCH01", data = "<root/>" },
-                    new { id = t.Id, messageId = t.MessageId, dateTime = t.Received.AddSeconds(2).UtcDateTime.ToString("o"), @event = t.Status == "failed" ? "Fail" : "Deliver", action = "", description = t.Status == "failed" ? "Reason: 550 5.7.1" : "The message was successfully delivered.", data = "" } };
-                return Json(HttpStatusCode.OK, JsonSerializer.Serialize(new { value = events }));
+                return Json(HttpStatusCode.OK, JsonSerializer.Serialize(new { value = Route(t) }));
             }
 
             string query = request.RequestUri.Query.TrimStart('?');

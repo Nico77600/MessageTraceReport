@@ -8,7 +8,7 @@
 
 $script:GuidPattern = '^[0-9a-fA-F]{8}-([0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}$'
 $script:Ranges = @('Last24Hours', 'Last48Hours', 'Last7Days', 'Last10Days', 'Last30Days', 'Last90Days', 'Today', 'Yesterday')
-$script:ReportFiles = @('Messages', 'Deliveries', 'Senders', 'Recipients')
+$script:ReportFiles = @('Messages', 'Deliveries', 'Senders', 'Recipients', 'Routes')
 
 function Resolve-MtrPath {
     param([Parameter(Mandatory)][string]$Path, [Parameter(Mandatory)][string]$Root)
@@ -91,9 +91,11 @@ function Import-MtrConfiguration {
             PeriodSeconds = Test-Int (Get-Value $th 'Throttling' 'PeriodSeconds' 300) 'Throttling.PeriodSeconds' 60 3600
         }
         Details        = [ordered]@{
-            Enabled       = Test-Bool (Get-Value $d 'Details' 'Enabled' $false) 'Details.Enabled'
-            MaxDeliveries = Test-Int (Get-Value $d 'Details' 'MaxDeliveries' 50) 'Details.MaxDeliveries' 1 10000
-            OnlyProblems  = Test-Bool (Get-Value $d 'Details' 'OnlyProblems' $true) 'Details.OnlyProblems'
+            Enabled              = Test-Bool (Get-Value $d 'Details' 'Enabled' $false) 'Details.Enabled'
+            MaxDeliveries        = Test-Int (Get-Value $d 'Details' 'MaxDeliveries' 100) 'Details.MaxDeliveries' 1 10000
+            OnlyProblems         = Test-Bool (Get-Value $d 'Details' 'OnlyProblems' $true) 'Details.OnlyProblems'
+            CompareWithDelivered = Test-Bool (Get-Value $d 'Details' 'CompareWithDelivered' $true) 'Details.CompareWithDelivered'
+            ConsoleMessages      = Test-Int (Get-Value $d 'Details' 'ConsoleMessages' 3) 'Details.ConsoleMessages' 0 50
         }
         Collect        = [ordered]@{
             Days          = Test-Int (Get-Value $co 'Collect' 'Days' 2) 'Collect.Days' 1 90

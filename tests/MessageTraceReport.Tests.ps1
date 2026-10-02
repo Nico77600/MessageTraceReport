@@ -3,7 +3,7 @@
 <#
     Message Trace Report - automated tests (Pester 5 or later).
     Author  : Nicolas Fabert
-    Version : 1.0.0
+    Version : 1.1.0
 
     Run:  Invoke-Pester -Path .\tests -Output Detailed
 
@@ -422,7 +422,7 @@ Describe 'Collection failures' {
 
 Describe 'Report files' {
     BeforeAll {
-        $script:S3 = New-TestConfiguration -Name 'report' -Report @{ MaxRowsPerFile = 1000; HtmlMaxMessages = 300; Formats = "@('Csv', 'Html', 'Json')" }
+        $script:S3 = New-TestConfiguration -Name 'report' -Report @{ MaxRowsPerFile = 1000; HtmlMaxMessages = 300; Formats = "@('Csv', 'Html', 'Json')"; Files = "@('Messages', 'Deliveries', 'Senders', 'Recipients', 'Routes')" }
         $script:Store3 = Open-MtrStore -Settings $script:S3
         $g = [MtrTests.FakeGraph]::new(); $now = [DateTimeOffset]::UtcNow; $g.Now = $now
         for ($i = 0; $i -lt 400; $i++) { $g.AddMessage('alice@contoso.com', [string[]]@('x@fabrikam.com', 'y@fabrikam.com', 'z@contoso.com'), $now.AddMinutes(-10 * $i - 5), "=HYPERLINK(""http://x"") $i", 'delivered', [string[]]@('delivered', $(if ($i % 10) { 'delivered' } else { 'failed' }), 'delivered')) }
@@ -438,10 +438,13 @@ Describe 'Report files' {
     }
     AfterAll { $script:Store3.Dispose() }
 
-    It 'reads the route of the failed deliveries first' {
-        $script:DetailItems.Count | Should -Be 5
+    It 'reads one failed and one delivered recipient of the newest messages with a problem' {
+        @($script:DetailItems | Where-Object Kind -eq 'Problem').Count | Should -Be 3
+        @($script:DetailItems | Where-Object Kind -eq 'Comparison').Count | Should -Be 2
+        $script:DetailItems[0].Recipient | Should -Be 'y@fabrikam.com'
+        $script:DetailItems[1].Recipient | Should -Be 'x@fabrikam.com'
         $script:Details.Done | Should -Be 5
-        $script:Details.Events | Should -Be 10
+        $script:Details.Events | Should -Be 15
     }
     It 'counts messages, deliveries and statuses of the whole selection' {
         $script:R3.Messages | Should -Be 400
@@ -460,10 +463,17 @@ Describe 'Report files' {
     It 'writes the Messages and Deliveries JSON files with the Graph property names' {
         $d = Get-Content (Join-Path $script:Dir3 'MessageTrace_Deliveries.json') -Raw | ConvertFrom-Json
         $d.Count | Should -Be 1200
-        $d[0].PSObject.Properties.Name | Should -Be @('id', 'messageId', 'status', 'receivedDateTime', 'recipientAddress', 'senderAddress', 'subject', 'size', 'fromIP', 'toIP')
+        ($d | Where-Object { -not $_.events } | Select-Object -First 1).PSObject.Properties.Name | Should -Be @('id', 'messageId', 'status', 'receivedDateTime', 'recipientAddress', 'senderAddress', 'subject', 'size', 'fromIP', 'toIP')
+        $failed = $d | Where-Object { $_.events -and $_.status -eq 'failed' } | Select-Object -First 1
+        $failed.events.event | Should -Be @('Receive', 'Submit', 'Fail')
+        $failed.reason | Should -Be '550 5.1.10 Recipient not found by SMTP address lookup'
+        $failed.causeId | Should -Be 'not-found'
+        $failed.cause | Should -Be 'Recipient not found'
         $m = Get-Content (Join-Path $script:Dir3 'MessageTrace_Messages.json') -Raw | ConvertFrom-Json
         $m[0].recipientCount | Should -Be 3
         $m[0].status | Should -Be 'Delivered 2, Failed 1'
+        $m[0].reason | Should -Be '550 5.1.10 Recipient not found by SMTP address lookup'
+        $m[0].cause | Should -Be 'Recipient not found'
     }
     It 'limits the HTML table but keeps the totals of every message, with the routes' {
         $script:R3.HtmlTruncated | Should -BeTrue
@@ -482,11 +492,192 @@ Describe 'Report files' {
             $routes += @($json.x).Count
         }
         $routes | Should -Be 5
+        $meta.routes | Should -Be 5
+        $meta.problemDeliveries | Should -Be 40
+        $meta.problemRoutes | Should -Be 3
+        $meta.reasons[0][0] | Should -Be '550 5.1.10 Recipient not found by SMTP address lookup'
+        $meta.reasons[0][5] | Should -Be 3
+        $meta.reasons[0][8] | Should -Be 'Recipient not found'
+        $meta.causes[0][0] | Should -Be 'Recipient not found'
+        $meta.causes[0][2] | Should -Be 3
+    }
+    It 'writes one row per step of the routes read, and the cause and reason of each delivery' {
+        $rows = Import-Csv (Join-Path $script:Dir3 'MessageTrace_Routes.csv') -Delimiter ';'
+        $rows.Count | Should -Be 15
+        $fail = $rows | Where-Object Event -eq 'Fail' | Select-Object -First 1
+        $fail.'Status code' | Should -Be '550 5.1.10'
+        $fail.Cause | Should -Be 'Recipient not found'
+        $fail.Step | Should -Be '3'
+        $rows[0].Facts | Should -Match 'Server=EXCH01.contoso.com'
+        $d = Import-Csv (Join-Path $script:Dir3 'MessageTrace_Deliveries.csv') -Delimiter ';'
+        ($d | Where-Object { $_.Reason -like '550 5.1.10*' }).Count | Should -Be 3
+        ($d | Where-Object Cause -eq 'Recipient not found').Count | Should -Be 3
+        ($d | Where-Object Route -eq 'Receive > Submit > Deliver').Count | Should -Be 2
+        (Import-Csv (Join-Path $script:Dir3 'MessageTrace_Messages.csv') -Delimiter ';' | Select-Object -First 1).Cause | Should -Be 'Recipient not found'
+        $script:R3.Reasons[0].Deliveries | Should -Be 3
+        $script:R3.Reasons[0].Messages | Should -Be 3
+        $script:R3.Causes[0].CauseId | Should -Be 'not-found'
     }
     It 'counts senders and recipients per day' {
         $rows = Import-Csv (Join-Path $script:Dir3 'MessageTrace_Recipients.csv') -Delimiter ';'
         ($rows | Measure-Object -Property Messages -Sum).Sum | Should -Be 1200
         $rows[0].PSObject.Properties.Name[0] | Should -Be 'Date'
+    }
+}
+
+Describe 'Routes' {
+    BeforeAll {
+        function New-Row([long]$Ms, [string]$Event, [string]$Action = '', [string]$Description = '', [string]$Data = '') {
+            [MessageTraceReport.DetailRow]@{ TimeMs = $Ms; Event = $Event; Action = $Action; Description = $Description; Data = $Data }
+        }
+        function ConvertTo-Rows([MtrTests.FakeTrace]$Trace) {
+            $list = [Collections.Generic.List[MessageTraceReport.DetailRow]]::new()
+            foreach ($e in [MtrTests.FakeGraph]::Route($Trace)) { $list.Add((New-Row ([DateTimeOffset]::Parse($e.dateTime).ToUnixTimeMilliseconds()) $e.event $e.action $e.description $e.data)) }
+            return , $list
+        }
+        $script:T0 = [DateTimeOffset]::Parse('2026-09-28T10:27:02Z')
+        $script:Trace = { param($Recipient, $Status) [MtrTests.FakeTrace]@{ Id = 'id-1'; MessageId = '<m1@contoso.com>'; Sender = 'alice@contoso.com'; Recipient = $Recipient; Subject = 'Report'; Received = $script:T0; Status = $Status } }
+    }
+
+    It 'reads the code, text, remote server and Learn page of a reason' {
+        $r = [MessageTraceReport.RouteAnalyzer]::ParseReason('Reason: [{LED=450 4.4.317 Cannot connect to remote server [Message=SocketError: TimedOut] [LastAttemptedServerName=mx.fabrikam.com] [LastAttemptedIP=192.0.2.10:25]};{MSG=};{FQDN=mx.fabrikam.com};{IP=192.0.2.10};{LRT=}]', '')
+        $r.Smtp | Should -Be '450'
+        $r.Code | Should -Be '4.4.317'
+        $r.Text | Should -Be 'Cannot connect to remote server'
+        $r.Severity | Should -Be 'Temporary'
+        $r.RemoteHost | Should -Be 'mx.fabrikam.com'
+        $r.RemoteIp | Should -Be '192.0.2.10'
+        $r.DocTitle | Should -Match 'remote server'
+        $r = [MessageTraceReport.RouteAnalyzer]::ParseReason('Reason: [{LED=550 5.1.10 RESOLVER.ADR.RecipientNotFound; Recipient not found by SMTP address lookup};{MSG=};{FQDN=};{IP=};{LRT=}]', '')
+        $r.Short | Should -Be '550 5.1.10 Recipient not found by SMTP address lookup'
+        $r.Detail | Should -Be 'RESOLVER.ADR.RecipientNotFound'
+        $r.DocUrl | Should -Match 'fix-error-code-550-5-1-10'
+        [MessageTraceReport.RouteAnalyzer]::ParseReason('The message was successfully delivered.', '') | Should -BeNullOrEmpty
+    }
+    It 'turns the XML data into labelled facts, CustomData included' {
+        $facts = [MessageTraceReport.RouteAnalyzer]::ParseData('<root><MEP Name="ServerHostName" String="EXCH01" /><MEP Name="SFV" String="SPM" /><MEP Name="CustomData" Blob="S:ProxyHop1=EOP01;S:tlsversion=TLS1_3" /><MEP Name="SequenceNumber" Long="0" /></root>')
+        $facts.Key | Should -Be @('Server', 'Spam filter verdict (SFV)', 'Proxy hop 1', 'TLS version')
+        $facts[1].Value | Should -Be 'SPM (spam)'
+    }
+    It 'puts the DLP rule before the failure it caused (same second, returned the other way round)' {
+        $route = [MessageTraceReport.RouteAnalyzer]::Analyze((ConvertTo-Rows (& $script:Trace 'dlp-user@contoso.com' 'failed')))
+        $route.Events.Event | Should -Be @('Receive', 'Submit', 'DLP rule', 'Fail')
+        $route.Outcome | Should -Be 'Failed'
+        $route.Reason.Code | Should -Be '5.7.171'
+        $route.Reason.Component | Should -Be 'DLP Policy Agent'
+        [MessageTraceReport.RouteAnalyzer]::Explain($route) | Should -Be '550 5.7.171 Delivery not authorized, message refused [DLP Policy Agent]'
+        $route.Summary | Should -Be 'Receive > Submit > DLP rule > Fail (550 5.7.171)'
+        $route.Cause.Id | Should -Be 'dlp'
+        $route.Cause.Text | Should -Be "Blocked by DLP (rule 'Block credit cards' of policy 'Financial data')"
+        $route.Events[2].Tone | Should -Be 'danger'
+    }
+    It 'names the cause of each failure: DLP, mail flow rule, restrictions, remote server, quota ...' {
+        $cause = { param($Recipient, $Status, $Subject = 'Report') $t = & $script:Trace $Recipient $Status; $t.Subject = $Subject; [MessageTraceReport.RouteAnalyzer]::Analyze((ConvertTo-Rows $t)).Cause }
+        $c = & $cause 'etr-user@contoso.com' 'failed'
+        $c.Id | Should -Be 'etr'
+        $c.Text | Should -Be "Blocked by mail flow rule (ETR) (rule 'Block external contracts')"
+        (& $cause 'all-staff@contoso.com' 'failed').Id | Should -Be 'restricted'
+        $c = & $cause 'j.doe@wingtiptoys.com' 'failed'
+        $c.Id | Should -Be 'remote-not-found'
+        $r = [MessageTraceReport.RouteAnalyzer]::ParseReason('Reason: [{LED=550 5.1.1 <j.doe@wingtiptoys.com>: Recipient address rejected: User unknown};{MSG=};{FQDN=mx.wingtiptoys.com};{IP=203.0.113.5};{LRT=}]', '')
+        $r.Short | Should -Be '550 5.1.1 Recipient address rejected: User unknown'
+        (& $cause 'gone@contoso.com' 'failed').Id | Should -Be 'not-found'
+        $p = & $cause 'carol@fabrikam.com' 'pending'
+        $p.Id | Should -Be 'network'
+        $p.Tone | Should -Be 'warning'
+        (& $cause 'bob@contoso.com' 'quarantined').Id | Should -Be 'spam-quarantine'
+        (& $cause 'bob@contoso.com' 'filteredAsSpam').Id | Should -Be 'junk'
+        & $cause 'dan@contoso.com' 'delivered' | Should -BeNullOrEmpty
+        & $cause 'sales@contoso.com' 'expanded' | Should -BeNullOrEmpty
+    }
+    It 'reads the cause from the code when the route does not name the component' {
+        $fail = {
+            param([string]$Reason, [string]$RuleEvent = '', [string]$RuleAction = '')
+            $rows = [Collections.Generic.List[MessageTraceReport.DetailRow]]::new()
+            $rows.Add((New-Row 1000 'Receive' '' 'Message received by: EXCH01'))
+            if ($RuleEvent) { $rows.Add((New-Row 2000 $RuleEvent $RuleAction "$($RuleEvent): '', ID: ('a1720161-606e-43e8-bad5-eb7bed96a52b'), DLP policy: '', ID: (00000000-0000-0000-0000-000000000000).")) }
+            $rows.Add((New-Row 3000 'Fail' '' "Reason: [{LED=$Reason};{MSG=};{FQDN=};{IP=};{LRT=}]"))
+            [MessageTraceReport.RouteAnalyzer]::Analyze($rows).Cause
+        }
+        (& $fail '550 5.7.950 Contracts must not leave the company').Id | Should -Be 'etr'
+        (& $fail '550 5.7.1 Delivery not authorized, message refused' 'Transport rule').Id | Should -Be 'etr'
+        $c = & $fail '550 5.7.1 Delivery not authorized, message refused' 'DLP rule' 'BA'
+        $c.Id | Should -Be 'dlp'
+        $c.Rule | Should -Be 'rule ID a1720161-606e-43e8-bad5-eb7bed96a52b'
+        (& $fail '550 5.7.1 Delivery not authorized, message refused').Id | Should -Be 'policy'
+        # A DLP rule that only notifies does not explain a full mailbox (lab, 2026-09-28).
+        (& $fail '554 5.2.2 mailbox full; STOREDRV.Deliver.Exception:QuotaExceededException' 'DLP rule' 'NU').Id | Should -Be 'mailbox-full'
+        (& $fail '550 5.7.23 The message was rejected because of Sender Policy Framework violation').Id | Should -Be 'auth'
+        (& $fail '550 5.7.520 Access denied, Your organization does not allow external forwarding').Id | Should -Be 'forwarding'
+        (& $fail '550 4.4.7 Message expired').Id | Should -Be 'expired'
+        (& $fail '550 5.7.703 Your message can''t be delivered because messages to x are blocked by your organization').Id | Should -Be 'tabl'
+        (& $fail '550 5.2.121 Recipient''s per hour message receive limit from specific sender exceeded').Id | Should -Be 'limits'
+        (& $fail '550 5.7.708 Service unavailable. Access denied, traffic not accepted from this IP').Id | Should -Be 'sender-blocked'
+        (& $fail '550 5.7.133 RESOLVER.RST.SenderNotAuthenticatedForGroup; authentication required').Id | Should -Be 'restricted'
+        (& $fail '554 5.6.11 Invalid characters').Id | Should -Be 'format'
+        (& $fail '550 5.0.350 Generic error').Id | Should -Be 'other'
+    }
+    It 'explains quarantine, delay and group expansion' {
+        $q = [MessageTraceReport.RouteAnalyzer]::Analyze((ConvertTo-Rows (& $script:Trace 'bob@contoso.com' 'quarantined')))
+        $q.Outcome | Should -Be 'Delivered to Quarantine'
+        [MessageTraceReport.RouteAnalyzer]::Explain($q) | Should -Be 'Delivered to Quarantine (SCL 8, SFV SPM)'
+        $p = [MessageTraceReport.RouteAnalyzer]::Analyze((ConvertTo-Rows (& $script:Trace 'carol@fabrikam.com' 'pending')))
+        $p.Outcome | Should -Be 'Deferred'
+        [MessageTraceReport.RouteAnalyzer]::Explain($p) | Should -Be '450 4.4.317 Cannot connect to remote server'
+        $g = [MessageTraceReport.RouteAnalyzer]::Analyze((ConvertTo-Rows (& $script:Trace 'sales@contoso.com' 'expanded')))
+        $g.Outcome | Should -Be 'Expanded'
+        $g.Events[-1].Help | Should -Match 'normal'
+        [MessageTraceReport.RouteAnalyzer]::Explain($g) | Should -BeNullOrEmpty
+        $d = [MessageTraceReport.RouteAnalyzer]::Analyze((ConvertTo-Rows (& $script:Trace 'dan@contoso.com' 'delivered')))
+        $d.Outcome | Should -Be 'Delivered'
+        $d.Server | Should -Be 'MBX01.contoso.com'
+    }
+
+    Context 'Selection of the routes to read and journey of one message' {
+        BeforeAll {
+            $script:S5 = New-TestConfiguration -Name 'routes'
+            $script:Store5 = Open-MtrStore -Settings $script:S5
+            $script:G5 = [MtrTests.FakeGraph]::new(); $now = [DateTimeOffset]::UtcNow; $script:G5.Now = $now
+            # Message 1: one failed (DLP), one pending, two delivered. Messages 2-4: all delivered.
+            $script:G5.AddMessage('alice@contoso.com', [string[]]@('dlp-user@contoso.com', 'carol@fabrikam.com', 'dan@contoso.com', 'erin@contoso.com'), $now.AddMinutes(-30), 'Quarterly report', 'delivered', [string[]]@('failed', 'pending', 'delivered', 'delivered'))
+            for ($i = 2; $i -le 4; $i++) { $script:G5.AddMessage('alice@contoso.com', [string[]]@('dan@contoso.com', 'erin@contoso.com'), $now.AddMinutes(-30 - $i), "Note $i") }
+            $script:P5 = New-Period $now.AddHours(-2) $now.AddMinutes(-1)
+            $script:F5 = New-MtrFilter -Sender 'alice@contoso.com'
+            [void](Invoke-TestCollection -Settings $script:S5 -Store $script:Store5 -Graph $script:G5 -Filter $script:F5 -Period $script:P5)
+            [void](Select-MtrMessages -Store $script:Store5 -Filter $script:F5 -Period $script:P5)
+            $script:Opt5 = [MessageTraceReport.CollectorOptions]@{ Handler = $script:G5; MaxConcurrency = 2; MaxRetries = 1; TimeoutSeconds = 30 }
+        }
+        AfterAll { $script:Store5.Dispose() }
+
+        It 'beyond the limit: each problem status, one delivered recipient to compare, nothing else' {
+            $items = $script:Store5.GetDetailCandidates(5, $true, $true)
+            $items.Recipient | Should -Be @('carol@fabrikam.com', 'dlp-user@contoso.com', 'dan@contoso.com')
+            $items.Kind | Should -Be @('Problem', 'Problem', 'Comparison')
+            $script:Store5.GetDetailCandidates(5, $true, $false).Count | Should -Be 2
+            $script:Store5.GetDetailCandidates(5, $false, $true).Count | Should -Be 5
+        }
+        It 'reads every route of a selection within the limit, and never twice' {
+            $items = $script:Store5.GetDetailCandidates(100, $true, $true)
+            $items.Count | Should -Be 10
+            $r = Invoke-MtrDetails -Store $script:Store5 -Settings $script:S5 -Connection (New-FakeConnection) -Items $items -Options $script:Opt5 6>$null
+            $r.Done | Should -Be 10
+            $script:Store5.GetDetailCandidates(100, $true, $true).Count | Should -Be 0
+            $script:Store5.CountSelectionRoutes() | Should -Be 10
+        }
+        It 'groups the recipients of a message by identical route, problems first' {
+            $j = [MessageTraceReport.Journeys]::Build($script:Store5.ReadSelection(), $script:Store5.GetSelectionDetails(), 3)
+            $j.Count | Should -Be 3
+            $j[0].Subject | Should -Be 'Quarterly report'
+            $j[0].Groups.Count | Should -Be 3
+            $j[0].Groups[0].Status | Should -Be 'Failed'
+            $j[0].Groups[-1].Status | Should -Be 'Delivered'
+            $j[0].Groups[-1].Recipients | Should -Be @('dan@contoso.com', 'erin@contoso.com')
+            $out = Write-MtrJourney -Journeys $j -Zone $script:Paris 6>&1 | Out-String
+            $out | Should -Match 'Route A'
+            $out | Should -Match 'Failed: Blocked by DLP'
+            $out | Should -Match '550 5\.7\.171'
+            $out | Should -Match 'same route up to Submit'
+        }
     }
 }
 
