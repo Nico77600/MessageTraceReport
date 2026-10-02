@@ -1,0 +1,9 @@
+# Created at run time - never commit them (tenant data, compiled engine)
+bin/
+data/
+reports/
+logs/
+*.sqlite
+*.sqlite-*
+*.lock
+*.zip

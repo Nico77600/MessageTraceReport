@@ -1,0 +1,464 @@
+<!doctype html>
+<!--
+    Message Trace Report - HTML template
+    Author  : Nicolas Fabert
+    Version : 1.0.0
+    The engine (src\Engine.Report.cs) copies this file and replaces two markers near the end of the
+    body (each must appear exactly once):
+      CHUNKS marker : the compressed data blocks (<script type="application/x-mtr-chunk">)
+      META marker   : the report description (period, filters, totals, top lists, timeline) as JSON
+    Everything else is static: edit texts, colours or columns here, no rebuild needed.
+-->
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Message trace | Exchange Online</title>
+<script>
+  (() => {
+    const param = new URLSearchParams(window.location.search).get("scoutTheme");
+    const theme = param === "light" || param === "dark" ? param : (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+    document.documentElement.setAttribute("data-theme", theme);
+  })();
+</script>
+<style>
+:root {
+  color-scheme: light;
+  --cp-bg: #f7f4ef; --cp-bg-elevated: #fcfbf8; --cp-surface: #ffffff; --cp-surface-soft: #f5f5f5;
+  --cp-border: #dedede; --cp-border-strong: #919191; --cp-text: #242424; --cp-text-muted: #5c5c5c; --cp-text-soft: #6f6f6f;
+  --cp-accent: #b11f4b; --cp-accent-hover: #9a1a41; --cp-accent-soft: rgba(177, 31, 75, 0.08); --cp-accent-fg: #ffffff;
+  --cp-success: #16a34a; --cp-danger: #dc2626; --cp-warning: #f59e0b; --cp-link: #0078d4; --cp-violet: #7c3aed; --cp-gray: #9ca3af;
+  --cp-shadow: 0 18px 48px rgba(0, 0, 0, 0.12); --cp-overlay: rgba(255, 255, 255, 0.8);
+  --cp-highlight: rgba(177, 31, 75, 0.12);
+}
+html[data-theme="dark"] {
+  color-scheme: dark;
+  --cp-bg: #3d3b3a; --cp-bg-elevated: #343231; --cp-surface: #292929; --cp-surface-soft: #2e2e2e;
+  --cp-border: #474747; --cp-border-strong: #5f5f5f; --cp-text: #dedede; --cp-text-muted: #919191; --cp-text-soft: #b0b0b0;
+  --cp-accent: #fd8ea1; --cp-accent-hover: #fb7b91; --cp-accent-soft: rgba(253, 142, 161, 0.14); --cp-accent-fg: #1a1a1a;
+  --cp-success: #4ade80; --cp-danger: #f87171; --cp-warning: #fbbf24; --cp-link: #4da6ff; --cp-violet: #a78bfa; --cp-gray: #8b8b8b;
+  --cp-shadow: 0 18px 48px rgba(0, 0, 0, 0.32); --cp-overlay: rgba(41, 41, 41, 0.88);
+  --cp-highlight: rgba(253, 142, 161, 0.12);
+}
+* { box-sizing: border-box; }
+body { margin:0; padding:28px 32px; background:var(--cp-bg); color:var(--cp-text); font:14px "Segoe UI", Aptos, Calibri, -apple-system, BlinkMacSystemFont, sans-serif; }
+h1 { font-size:32px; font-weight:650; letter-spacing:-0.025em; margin:8px 0 12px; }
+h2 { font-size:18px; font-weight:600; margin:0 0 12px; }
+p { line-height:1.5; margin:8px 0; } .muted, small { color:var(--cp-text-muted); }
+header { position:relative; overflow:hidden; border:1px solid var(--cp-border); border-top:4px solid var(--cp-accent); border-radius:16px; padding:24px; margin-bottom:20px; background:linear-gradient(125deg,var(--cp-surface) 35%,var(--cp-accent-soft)); }
+header::before { content:""; position:absolute; width:280px; height:280px; right:-100px; top:-160px; border:40px solid var(--cp-highlight); border-radius:50%; pointer-events:none; }
+.hero-top { position:relative; display:flex; justify-content:space-between; gap:24px; align-items:flex-start; flex-wrap:wrap; }
+#origin { color:var(--cp-accent); font-size:11px; letter-spacing:0.1em; text-transform:uppercase; font-weight:700; }
+.subtitle { color:var(--cp-text-muted); max-width:720px; }
+#filters-text { margin:4px 0 0; padding-left:18px; color:var(--cp-text-muted); font-size:13px; }
+.period { min-width:280px; padding:12px 16px; border:1px solid var(--cp-border); border-radius:0.625rem; background:var(--cp-surface); }
+.label { font-size:11px; color:var(--cp-accent); font-weight:700; letter-spacing:0.08em; text-transform:uppercase; display:block; margin-bottom:8px; }
+#range { font-size:13px; line-height:1.6; font-variant-numeric:tabular-nums; }
+.metrics { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:16px; margin:20px 0 16px; }
+.tile { position:relative; overflow:hidden; padding:18px 20px; border:1px solid var(--cp-border); border-radius:16px; background:var(--cp-surface); transition:transform 160ms ease,border-color 160ms ease; }
+.tile:hover { transform:translateY(-3px); border-color:var(--cp-accent); }
+.tile::after { content:""; position:absolute; width:80px; height:80px; right:-28px; bottom:-32px; border:14px solid var(--cp-highlight); border-radius:50%; pointer-events:none; }
+.tile-primary { background:linear-gradient(125deg,var(--cp-accent-hover),var(--cp-accent)); border-color:var(--cp-accent); color:var(--cp-accent-fg); }
+.tile-tinted { background:linear-gradient(135deg,var(--cp-surface),var(--cp-accent-soft)); }
+.tile-label { display:block; font-size:12px; font-weight:600; margin-bottom:12px; }
+.tile strong { display:block; font-size:32px; font-weight:650; letter-spacing:-0.025em; font-variant-numeric:tabular-nums; }
+.tile small { display:block; margin-top:8px; font-size:11px; } .tile-primary small { color:var(--cp-accent-fg); }
+.tile-icon { position:absolute; top:16px; right:16px; width:20px; height:20px; opacity:0.7; }
+.caption { font-size:12px; color:var(--cp-text-muted); margin:0 0 12px; }
+.section-row { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:24px; border-top:1px solid var(--cp-border); margin-top:16px; padding-top:16px; position:relative; }
+.section-row h2 { margin:0 0 4px; font-size:14px; }
+.status-bar { display:flex; height:12px; border-radius:8px; overflow:hidden; background:var(--cp-border); margin:10px 0; }
+.status-bar span { height:100%; transition:width 220ms ease; }
+.legend { display:flex; flex-wrap:wrap; gap:6px 16px; font-size:12px; color:var(--cp-text-muted); }
+.legend i { display:inline-block; width:10px; height:10px; border-radius:3px; margin-right:6px; vertical-align:-1px; }
+#timeline { width:100%; height:110px; display:block; }
+#timeline rect.all { fill:var(--cp-accent); opacity:0.75; } #timeline rect.bad { fill:var(--cp-danger); }
+#timeline rect:hover { opacity:1; } #timeline text { fill:var(--cp-text-muted); font-size:10px; }
+.rank-list { display:grid; grid-template-columns:1fr; gap:4px; margin:8px 0 0; padding:0; list-style:none; }
+.rank { display:flex; align-items:center; justify-content:space-between; gap:12px; width:100%; padding:5px 10px; border:1px solid var(--cp-border); border-radius:0.625rem; text-align:left; font-size:12px; background:linear-gradient(to right,var(--cp-accent-soft) var(--share),var(--cp-surface) var(--share)); }
+.rank-name { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.rank-count { flex-shrink:0; font-variant-numeric:tabular-nums; color:var(--cp-text-muted); }
+#messages { background:var(--cp-surface); border:1px solid var(--cp-border); border-radius:16px; padding:20px; margin-bottom:20px; }
+input, button, select { font:inherit; color:var(--cp-text); background:var(--cp-surface); border:1px solid var(--cp-border); padding:7px 10px; border-radius:0.625rem; }
+button { cursor:pointer; } button:disabled { color:var(--cp-text-muted); cursor:default; }
+button:not(:disabled):hover, a:hover { color:var(--cp-accent); border-color:var(--cp-accent); }
+.primary-button { background:var(--cp-accent); color:var(--cp-accent-fg); border-color:var(--cp-accent); }
+.primary-button:not(:disabled):hover { background:var(--cp-accent-hover); color:var(--cp-accent-fg); }
+:focus-visible { outline:2px solid var(--cp-accent); outline-offset:2px; }
+a { color:var(--cp-link); } [hidden] { display:none !important; }
+.filters { display:grid; grid-template-columns:repeat(4,minmax(160px,1fr)); gap:12px 16px; margin:12px 0; }
+.filters label { display:flex; flex-direction:column; gap:6px; font-size:12px; font-weight:600; min-width:0; }
+.filters input, .filters select { width:100%; min-width:0; font-weight:400; }
+.controls { display:flex; gap:8px 12px; flex-wrap:wrap; align-items:center; margin:12px 0; }
+#result-state { font-variant-numeric:tabular-nums; }
+.grid { border:1px solid var(--cp-border); border-radius:0.625rem; overflow:hidden; }
+.grid-head, .grid-row { display:grid; grid-template-columns:var(--columns); align-items:center; }
+.grid-head { background:var(--cp-surface-soft); font-weight:600; font-size:12px; border-bottom:1px solid var(--cp-border); }
+.grid-head div, .grid-row div { padding:0 10px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.grid-head div { padding-top:10px; padding-bottom:10px; }
+#viewport { position:relative; overflow:auto; height:62vh; min-height:280px; }
+#spacer { position:relative; width:100%; }
+.grid-row { position:absolute; left:0; right:0; height:36px; border-bottom:1px solid var(--cp-border); cursor:pointer; font-size:13px; }
+.grid-row:hover { background:var(--cp-accent-soft); }
+.num { text-align:right; font-variant-numeric:tabular-nums; }
+.mono { font-family:Consolas, "Cascadia Mono", monospace; font-size:12px; }
+.pill { display:inline-block; padding:1px 8px; border-radius:999px; font-size:12px; color:var(--cp-text); background:var(--cp-surface-soft); border:1px solid var(--cp-border); }
+.pill::before { content:""; display:inline-block; width:7px; height:7px; border-radius:50%; margin-right:6px; background:var(--dot,var(--cp-gray)); vertical-align:1px; }
+#empty { padding:24px; text-align:center; color:var(--cp-text-muted); }
+#loading { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; background:var(--cp-overlay); z-index:10; }
+#loading .box { background:var(--cp-surface); border:1px solid var(--cp-border); border-radius:16px; padding:24px 32px; box-shadow:var(--cp-shadow); min-width:320px; }
+.track { height:6px; border-radius:8px; background:var(--cp-border); margin-top:8px; overflow:hidden; }
+.fill { height:100%; width:0; border-radius:8px; background:var(--cp-accent); transition:width 220ms ease; }
+dialog { border:1px solid var(--cp-border); border-radius:16px; padding:0; background:var(--cp-surface); color:var(--cp-text); width:min(1000px,94vw); box-shadow:var(--cp-shadow); }
+dialog::backdrop { background:rgba(0,0,0,0.35); }
+.dialog-head { display:flex; justify-content:space-between; align-items:center; gap:16px; padding:16px 20px; border-bottom:1px solid var(--cp-border); }
+.dialog-body { padding:16px 20px; max-height:72vh; overflow:auto; }
+dl { display:grid; grid-template-columns:150px 1fr; gap:8px 16px; margin:0 0 16px; } dt { color:var(--cp-text-muted); } dd { margin:0; word-break:break-all; }
+table.recipients { width:100%; border-collapse:collapse; font-size:13px; }
+table.recipients th, table.recipients td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--cp-border); vertical-align:top; }
+table.recipients th { font-size:12px; color:var(--cp-text-muted); font-weight:600; }
+.route { margin:6px 0 2px; padding:0; list-style:none; border-left:2px solid var(--cp-accent); }
+.route li { padding:4px 0 6px 12px; position:relative; }
+.route li::before { content:""; position:absolute; left:-6px; top:9px; width:10px; height:10px; border-radius:50%; background:var(--cp-surface); border:2px solid var(--cp-accent); }
+.route .event { font-weight:600; } .route .when { color:var(--cp-text-muted); font-variant-numeric:tabular-nums; margin-left:8px; font-size:12px; }
+.route .desc { color:var(--cp-text-soft); font-size:12px; white-space:normal; }
+details.raw summary { cursor:pointer; color:var(--cp-text-muted); font-size:12px; } details.raw pre { white-space:pre-wrap; word-break:break-all; font-size:11px; max-height:200px; overflow:auto; background:var(--cp-surface-soft); padding:8px; border-radius:8px; }
+footer { color:var(--cp-text-muted); font-size:12px; line-height:1.6; }
+@media (max-width: 900px) { .metrics, .filters { grid-template-columns:repeat(2,minmax(0,1fr)); } .section-row { grid-template-columns:1fr; } }
+</style></head><body>
+<div id="loading"><div class="box"><span class="label">Loading report</span><p id="loading-text">Preparing data...</p><div class="track"><div class="fill" id="loading-fill"></div></div></div></div>
+<header><div class="hero-top"><div><span id="origin">Exchange Online / Message trace</span><h1 id="title">Message trace</h1>
+<p class="subtitle" id="subtitle"></p><ul id="filters-text"></ul></div>
+<div class="period"><span class="label">Received</span><div id="range"></div></div></div>
+<div class="metrics">
+<article class="tile tile-primary"><span class="tile-label">Messages</span><svg class="tile-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="m3 6 9 7 9-7"/></svg><strong id="metric-messages">0</strong><small id="metric-messages-note">Unique message trace IDs</small></article>
+<article class="tile tile-tinted"><span class="tile-label">Deliveries</span><svg class="tile-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="9" r="2.5"/><path d="M3 20v-1a6 6 0 0 1 12 0v1m2-5a4.5 4.5 0 0 1 5 4.5V20"/></svg><strong id="metric-deliveries">0</strong><small id="metric-deliveries-note">Message x recipient</small></article>
+<article class="tile tile-tinted"><span class="tile-label">Delivered</span><svg class="tile-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/></svg><strong id="metric-delivered">0</strong><small id="metric-delivered-note">Of the deliveries</small></article>
+<article class="tile"><span class="tile-label">Not delivered</span><svg class="tile-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="9"/><path d="M12 7v6m0 3.5v.5"/></svg><strong id="metric-problems">0</strong><small id="metric-problems-note">Failed, pending, quarantined, spam</small></article>
+</div>
+<div class="section-row">
+<section aria-labelledby="status-heading"><h2 id="status-heading">Delivery status</h2><p class="caption">All deliveries of the report.</p><div class="status-bar" id="status-bar"></div><div class="legend" id="status-legend"></div></section>
+<section aria-labelledby="timeline-heading"><h2 id="timeline-heading">Messages over time</h2><p class="caption" id="timeline-caption"></p><svg id="timeline" role="img" aria-label="Messages over time"></svg></section>
+</div>
+<div class="section-row">
+<section aria-labelledby="top-senders-heading"><h2 id="top-senders-heading">Top 10 senders</h2><p class="caption">By messages. Click to filter the table.</p><ol id="top-senders" class="rank-list"></ol></section>
+<section aria-labelledby="top-recipients-heading"><h2 id="top-recipients-heading">Top 10 recipients</h2><p class="caption">By messages received. Click to filter the table.</p><ol id="top-recipients" class="rank-list"></ol></section>
+</div>
+</header>
+<section id="messages"><h2>Messages</h2>
+<p class="caption" id="table-scope"></p>
+<div class="filters">
+<label for="search">Search all fields<input id="search" type="search" placeholder="Address, subject, Message ID..." autocomplete="off"></label>
+<label for="sender-filter">Sender<input id="sender-filter" type="search" placeholder="Address or part of it" autocomplete="off"></label>
+<label for="recipient-filter">Recipient<input id="recipient-filter" type="search" placeholder="Any recipient address" autocomplete="off"></label>
+<label for="subject-filter">Subject<input id="subject-filter" type="search" placeholder="Words in the subject" autocomplete="off"></label>
+<label for="status-filter">Status (any recipient)<select id="status-filter"><option value="">All</option></select></label>
+<label for="date-from">From (date)<input id="date-from" type="date"></label>
+<label for="date-to">To (date, included)<input id="date-to" type="date"></label>
+<label for="message-id-filter">Message ID<input id="message-id-filter" type="search" placeholder="Full or partial Message ID" autocomplete="off"></label>
+</div>
+<div class="controls"><label>Sort <select id="sort"><option value="time-desc">Newest first</option><option value="time-asc">Oldest first</option><option value="count-desc">Most recipients first</option><option value="size-desc">Largest first</option><option value="sender">Sender A to Z</option></select></label>
+<button id="clear-filters" type="button">Clear filters</button><button id="export" type="button" class="primary-button">Export view to CSV</button>
+<span id="result-state" class="muted" role="status" aria-live="polite"></span></div>
+<div class="grid" role="table" aria-label="Messages">
+<div class="grid-head" role="row" id="grid-head"></div>
+<div id="viewport"><div id="spacer"></div></div>
+<p id="empty" hidden>No messages match the current filters.</p>
+</div></section>
+<dialog id="detail"><div class="dialog-head"><h2 id="detail-title" style="margin:0">Message</h2><button id="detail-close" type="button">Close</button></div>
+<div class="dialog-body"><dl id="detail-fields"></dl>
+<div class="controls"><strong id="detail-recipients-title">Recipients</strong><button id="copy-recipients" type="button">Copy recipients</button></div>
+<table class="recipients"><thead><tr><th>Recipient</th><th>Status</th><th>Route</th></tr></thead><tbody id="detail-recipients"></tbody></table>
+<p class="caption" id="detail-more" hidden></p></div></dialog>
+<noscript>JavaScript is required to display this report. Open the CSV files of the same folder for the complete data.</noscript>
+<footer id="footer"></footer>
+%%CHUNKS%%
+<script id="report-meta" type="application/json">%%META%%</script>
+<script>
+(async () => {
+  "use strict";
+  const el = id => document.getElementById(id);
+  const meta = JSON.parse(el("report-meta").textContent);
+  const number = n => Number(n).toLocaleString("en-GB");
+  const percent = (a, b) => b ? (a / b * 100).toLocaleString("en-GB", { maximumFractionDigits: 1 }) + "%" : "0%";
+  const pad = n => String(n).padStart(2, "0");
+  // Times are stored as local wall-clock seconds of the report time zone and displayed with getUTC*.
+  const stamp = s => { const d = new Date(s * 1000); return `${d.getUTCFullYear()}-${pad(d.getUTCMonth()+1)}-${pad(d.getUTCDate())} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}`; };
+  const bytes = n => n >= 1048576 ? (n / 1048576).toFixed(1) + " MB" : n >= 1024 ? Math.round(n / 1024) + " KB" : n + " B";
+  const COLORS = { "Delivered": "var(--cp-success)", "Failed": "var(--cp-danger)", "Pending": "var(--cp-warning)", "Getting status": "var(--cp-warning)",
+    "Quarantined": "var(--cp-violet)", "Filtered as spam": "var(--cp-violet)", "Expanded": "var(--cp-link)" };
+  const colorOf = s => COLORS[s] || "var(--cp-gray)";
+  const RANK = { "Failed": 0, "Quarantined": 1, "Filtered as spam": 2, "Pending": 3, "Getting status": 4, "Delivered": 8, "Expanded": 9 };
+  const isProblem = s => !(s === "Delivered" || s === "Expanded");
+
+  // ---- Header -------------------------------------------------------------------
+  el("title").textContent = meta.title || "Message trace";
+  el("subtitle").textContent = `Exchange Online message trace${meta.tenant ? " of " + meta.tenant : ""}. One row per message; the recipients and their status are in the message details.`;
+  for (const f of meta.filters || []) { const li = document.createElement("li"); li.textContent = f; el("filters-text").append(li); }
+  const range = el("range");
+  for (const [label, value] of [["From", meta.periodStart], ["To", meta.periodEnd]]) { const line = document.createElement("div"); line.textContent = `${label} ${value}`; range.append(line); }
+  const zone = document.createElement("small"); zone.textContent = `${meta.timeZone} - end excluded`; range.append(zone);
+  if (meta.coveragePercent < 100) { const c = document.createElement("div"); c.className = "caption"; c.style.margin = "8px 0 0"; c.textContent = `Data coverage ${meta.coveragePercent}%${meta.coverageNote ? " - " + meta.coverageNote : ""}`; range.append(c); }
+
+  // ---- Totals of the whole report (all rows, even when the table is limited) --------
+  const statuses = meta.statuses || {}; let delivered = 0, problems = 0;
+  for (const [k, v] of Object.entries(statuses)) { if (isProblem(k)) problems += v; else delivered += v; }
+  el("metric-messages").textContent = number(meta.messages);
+  el("metric-messages-note").textContent = `${number(meta.senders)} sender${meta.senders === 1 ? "" : "s"}`;
+  el("metric-deliveries").textContent = number(meta.deliveries);
+  el("metric-deliveries-note").textContent = `${number(meta.recipients)} distinct recipient${meta.recipients === 1 ? "" : "s"}`;
+  el("metric-delivered").textContent = percent(delivered, meta.deliveries);
+  el("metric-delivered-note").textContent = `${number(delivered)} of ${number(meta.deliveries)} deliveries`;
+  el("metric-problems").textContent = number(problems);
+  el("metric-problems-note").textContent = problems ? `${percent(problems, meta.deliveries)} of the deliveries` : "Every delivery succeeded";
+  const bar = el("status-bar"), legend = el("status-legend");
+  for (const [k, v] of Object.entries(statuses).sort((a, b) => b[1] - a[1])) {
+    const seg = document.createElement("span"); seg.style.width = `${meta.deliveries ? v / meta.deliveries * 100 : 0}%`; seg.style.background = colorOf(k); seg.title = `${k}: ${number(v)}`; bar.append(seg);
+    const item = document.createElement("span"); const dot = document.createElement("i"); dot.style.background = colorOf(k); item.append(dot, `${k} ${number(v)} (${percent(v, meta.deliveries)})`); legend.append(item);
+  }
+
+  // ---- Timeline (SVG bars, failed messages in red) -----------------------------------
+  (function timeline() {
+    const data = meta.timeline || [], svg = el("timeline"), W = 600, H = 110, top = 6, base = 92;
+    svg.setAttribute("viewBox", `0 0 ${W} ${H}`); svg.setAttribute("preserveAspectRatio", "none");
+    el("timeline-caption").textContent = data.length ? `Messages per ${meta.hourly ? "hour" : "day"}; in red, messages with at least one failed recipient.` : "No messages.";
+    if (!data.length) return;
+    const max = Math.max(...data.map(d => d[1])), w = W / data.length, ns = "http://www.w3.org/2000/svg";
+    data.forEach((d, i) => {
+      const h = max ? d[1] / max * (base - top) : 0, hb = max ? d[2] / max * (base - top) : 0;
+      for (const [cls, height] of [["all", h], ["bad", hb]]) {
+        if (!height) continue;
+        const r = document.createElementNS(ns, "rect");
+        r.setAttribute("class", cls); r.setAttribute("x", (i * w + w * 0.12).toFixed(2)); r.setAttribute("width", Math.max(0.8, w * 0.76).toFixed(2));
+        r.setAttribute("y", (base - height).toFixed(2)); r.setAttribute("height", height.toFixed(2));
+        const t = document.createElementNS(ns, "title"); t.textContent = `${d[0]}: ${number(d[1])} messages, ${number(d[2])} with a failure`; r.append(t); svg.append(r);
+      }
+    });
+    for (const [x, anchor, text] of [[2, "start", data[0][0]], [W - 2, "end", data[data.length - 1][0]]]) {
+      const t = document.createElementNS(ns, "text"); t.setAttribute("x", x); t.setAttribute("y", H - 4); t.setAttribute("text-anchor", anchor); t.textContent = text; svg.append(t);
+    }
+    const m = document.createElementNS(ns, "text"); m.setAttribute("x", W - 2); m.setAttribute("y", 12); m.setAttribute("text-anchor", "end"); m.textContent = `max ${number(max)}`; svg.append(m);
+  })();
+
+  // ---- Top lists -------------------------------------------------------------------------
+  function ranking(listId, rows, onClick) {
+    const list = el(listId), first = rows.length ? rows[0][1] : 0;
+    for (const [name, count] of rows) {
+      const li = document.createElement("li"), b = document.createElement("button");
+      b.type = "button"; b.className = "rank"; b.title = name; b.style.setProperty("--share", `${first ? count / first * 100 : 0}%`);
+      const n = document.createElement("span"), c = document.createElement("span"); n.className = "rank-name"; c.className = "rank-count";
+      n.textContent = name || "(empty)"; c.textContent = number(count);
+      b.addEventListener("click", () => { onClick(name); el("messages").scrollIntoView({ behavior: "smooth" }); });
+      b.append(n, c); li.append(b); list.append(li);
+    }
+    if (!rows.length) { const p = document.createElement("p"); p.className = "muted"; p.textContent = "None."; list.replaceWith(p); }
+  }
+  ranking("top-senders", meta.topSenders || [], v => { el("sender-filter").value = v; applyFilters(); });
+  ranking("top-recipients", meta.topRecipients || [], v => { el("recipient-filter").value = v; applyFilters(); });
+  el("footer").textContent = `Received is the time Exchange Online received the message, shown in ${meta.timeZone}. A delivery is one message for one recipient (what the Microsoft Graph message trace API returns). ` +
+    `${meta.htmlTruncated ? `The table holds the ${number(meta.htmlMessages)} newest messages; totals, charts and the CSV files hold all ${number(meta.messages)}. ` : ""}` +
+    `Up to ${number(meta.recipientsPerMessage)} recipients are listed per message (problems first); the Deliveries CSV file holds all of them. ` +
+    `${(meta.strategy || []).join(" ")} This file contains e-mail addresses: store and share it accordingly. Generated ${meta.generated} by Message Trace Report ${meta.toolVersion || ""}.`;
+
+  // ---- Data loading: JSON -> gzip -> base64 chunks ------------------------------
+  const total = meta.htmlMessages || 0;
+  const T = new Float64Array(total), S = new Int32Array(total), J = new Int32Array(total), N = new Int32Array(total), Z = new Float64Array(total);
+  const M = new Array(total), IP = new Array(total), ID = new Array(total), RO = new Int32Array(total + 1);
+  const people = [], subjects = [], statusNames = [], routes = new Map();
+  let riParts = [], rsParts = [], riLength = 0;
+  async function decode(b64) {
+    const bin = atob(b64), raw = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) raw[i] = bin.charCodeAt(i);
+    const stream = new Blob([raw]).stream().pipeThrough(new DecompressionStream("gzip"));
+    return JSON.parse(await new Response(stream).text());
+  }
+  const blocks = Array.from(document.querySelectorAll('script[type="application/x-mtr-chunk"]'));
+  let row = 0;
+  try {
+    for (let b = 0; b < blocks.length; b++) {
+      const c = await decode(blocks[b].textContent);
+      blocks[b].remove();
+      for (const v of c.dp) people.push(v);
+      for (const v of c.dj) subjects.push(v);
+      for (const v of c.dst) statusNames.push(v);
+      const first = row;
+      for (let i = 0; i < c.t.length; i++, row++) {
+        T[row] = c.t[i]; S[row] = c.s[i]; J[row] = c.j[i]; N[row] = c.n[i]; Z[row] = c.z[i]; M[row] = c.m[i]; IP[row] = c.ip[i]; ID[row] = c.id[i];
+        RO[row + 1] = RO[row] + c.rl[i];
+      }
+      for (const x of c.x || []) routes.set(`${first + x[0]}|${x[1]}`, x[2]);
+      riParts.push(Int32Array.from(c.ri)); rsParts.push(Int32Array.from(c.rs)); riLength += c.ri.length;
+      el("loading-text").textContent = `Loading ${number(row)} of ${number(total)} messages...`;
+      el("loading-fill").style.width = `${total ? row / total * 100 : 100}%`;
+      await new Promise(r => setTimeout(r, 0));
+    }
+  } catch (error) {
+    el("loading-text").textContent = "This browser cannot open the compressed data (a recent Edge, Chrome or Firefox is required). Use the CSV files of the same folder.";
+    return;
+  }
+  const RI = new Int32Array(riLength), RS = new Int32Array(riLength);
+  { let o = 0; for (let p = 0; p < riParts.length; p++) { RI.set(riParts[p], o); RS.set(rsParts[p], o); o += riParts[p].length; } riParts = rsParts = null; }
+  el("loading").hidden = true;
+
+  // Status of a message: the status of its recipients, or "Mixed" (worst first).
+  const SUM = new Int32Array(total);   // index of the worst status in statusNames, -1 = mixed handled below
+  const MIXED = new Uint8Array(total);
+  for (let i = 0; i < total; i++) {
+    let worst = -1, same = true;
+    for (let k = RO[i]; k < RO[i + 1]; k++) {
+      const s = RS[k];
+      if (worst < 0) worst = s; else { if (s !== worst) same = false; if ((RANK[statusNames[s]] ?? 5) < (RANK[statusNames[worst]] ?? 5)) worst = s; }
+    }
+    SUM[i] = worst; MIXED[i] = same ? 0 : 1;
+  }
+  for (const name of statusNames.slice().sort()) { const o = document.createElement("option"); o.value = name; o.textContent = name; el("status-filter").append(o); }
+
+  // ---- Columns ---------------------------------------------------------------------
+  const statusText = i => SUM[i] < 0 ? "" : (MIXED[i] ? `${statusNames[SUM[i]]} (mixed)` : statusNames[SUM[i]]);
+  const columns = [
+    { title: "Received", width: "150px", cell: i => stamp(T[i]) },
+    { title: "Sender", width: "minmax(150px,1fr)", cell: i => people[S[i]] },
+    { title: "Recipients", width: "minmax(150px,1fr)", cell: i => recipientsPreview(i) },
+    { title: "Count", width: "64px", cls: "num", cell: i => number(N[i]) },
+    { title: "Status", width: "150px", pill: true, cell: i => statusText(i) },
+    { title: "Subject", width: "minmax(180px,1.6fr)", cell: i => subjects[J[i]] },
+    { title: "Size", width: "76px", cls: "num", cell: i => bytes(Z[i]) },
+    { title: "Message ID", width: "minmax(140px,1fr)", cls: "mono", cell: i => M[i] }
+  ];
+  document.documentElement.style.setProperty("--columns", columns.map(c => c.width).join(" "));
+  for (const c of columns) { const d = document.createElement("div"); d.textContent = c.title; if (c.cls) d.className = c.cls; el("grid-head").append(d); }
+  function recipientsPreview(i) { const n = RO[i + 1] - RO[i]; if (!n) return ""; const first = people[RI[RO[i]]]; return N[i] > 1 ? `${first} (+${N[i] - 1})` : first; }
+
+  // ---- Filtering -------------------------------------------------------------------
+  let view = new Int32Array(0);
+  const mask = (dictionary, query) => { const m = new Uint8Array(dictionary.length), q = query.toLowerCase(); for (let i = 0; i < dictionary.length; i++) m[i] = (dictionary[i] || "").toLowerCase().includes(q) ? 1 : 0; return m; };
+  const dayStart = value => { if (!value) return null; const [y, m, d] = value.split("-").map(Number); return Date.UTC(y, m - 1, d) / 1000; };
+  function applyFilters() {
+    const search = el("search").value.trim(), sender = el("sender-filter").value.trim(), recipient = el("recipient-filter").value.trim();
+    const subject = el("subject-filter").value.trim(), messageId = el("message-id-filter").value.trim().toLowerCase(), status = el("status-filter").value;
+    const from = dayStart(el("date-from").value), toStart = dayStart(el("date-to").value), to = toStart == null ? null : toStart + 86400;
+    const senderMask = sender ? mask(people, sender) : null, recipientMask = recipient ? mask(people, recipient) : null, subjectMask = subject ? mask(subjects, subject) : null;
+    const statusIndex = status ? statusNames.indexOf(status) : -1;
+    let searchPeople = null, searchSubject = null; const q = search.toLowerCase();
+    if (search) { searchPeople = mask(people, search); searchSubject = mask(subjects, search); }
+    const hasPerson = (i, m) => { for (let k = RO[i]; k < RO[i + 1]; k++) if (m[RI[k]]) return true; return false; };
+    const hasStatus = i => { for (let k = RO[i]; k < RO[i + 1]; k++) if (RS[k] === statusIndex) return true; return false; };
+    const out = new Int32Array(total); let n = 0;
+    for (let i = 0; i < total; i++) {
+      if (senderMask && !senderMask[S[i]]) continue;
+      if (subjectMask && !subjectMask[J[i]]) continue;
+      if (from != null && T[i] < from) continue;
+      if (to != null && T[i] >= to) continue;
+      if (messageId && !(M[i] || "").toLowerCase().includes(messageId)) continue;
+      if (status && !hasStatus(i)) continue;
+      if (recipientMask && !hasPerson(i, recipientMask)) continue;
+      if (search && !(searchPeople[S[i]] || searchSubject[J[i]] || (M[i] || "").toLowerCase().includes(q) || hasPerson(i, searchPeople))) continue;
+      out[n++] = i;
+    }
+    view = out.slice(0, n);
+    sortView();
+    el("table-scope").textContent = view.length === total ? `All ${number(total)} messages${meta.htmlTruncated ? " kept in this page (the newest)" : ""}.` : `Filtered view: ${number(view.length)} of ${number(total)} messages.`;
+    render(true);
+  }
+  function sortView() {
+    const mode = el("sort").value;
+    const cmp = mode === "time-asc" ? (a, b) => T[a] - T[b] || a - b
+      : mode === "count-desc" ? (a, b) => N[b] - N[a] || T[b] - T[a]
+      : mode === "size-desc" ? (a, b) => Z[b] - Z[a] || T[b] - T[a]
+      : mode === "sender" ? (a, b) => (people[S[a]] < people[S[b]] ? -1 : people[S[a]] > people[S[b]] ? 1 : T[b] - T[a])
+      : (a, b) => T[b] - T[a] || a - b;
+    view.sort(cmp);
+  }
+
+  // ---- Virtual scrolling: only the visible rows exist in the page ---------------------
+  const ROW = 36, viewport = el("viewport"), spacer = el("spacer");
+  function render(reset) {
+    if (reset) viewport.scrollTop = 0;
+    spacer.style.height = `${view.length * ROW}px`;
+    el("empty").hidden = view.length > 0;
+    el("result-state").textContent = `${number(view.length)} messages`;
+    const first = Math.max(0, Math.floor(viewport.scrollTop / ROW) - 10);
+    const last = Math.min(view.length, Math.ceil((viewport.scrollTop + viewport.clientHeight) / ROW) + 10);
+    const fragment = document.createDocumentFragment();
+    for (let p = first; p < last; p++) {
+      const i = view[p], line = document.createElement("div");
+      line.className = "grid-row"; line.setAttribute("role", "row"); line.style.top = `${p * ROW}px`; line.dataset.row = i; line.tabIndex = 0;
+      for (const c of columns) {
+        const cell = document.createElement("div"), text = c.cell(i);
+        if (c.pill && text) { const s = document.createElement("span"); s.className = "pill"; s.style.setProperty("--dot", colorOf(statusNames[SUM[i]])); s.textContent = text; cell.append(s); }
+        else cell.textContent = text;
+        cell.title = text; if (c.cls) cell.className = c.cls; line.append(cell);
+      }
+      fragment.append(line);
+    }
+    spacer.replaceChildren(fragment);
+  }
+  let ticking = false;
+  viewport.addEventListener("scroll", () => { if (!ticking) { ticking = true; requestAnimationFrame(() => { render(false); ticking = false; }); } });
+  window.addEventListener("resize", () => render(false));
+
+  // ---- Details dialog: fields, recipients with status and route ---------------------------
+  function showDetails(i) {
+    const fields = [["Received", `${stamp(T[i])} (${meta.timeZone})`], ["Sender", people[S[i]]], ["Subject", subjects[J[i]]], ["Status", statusText(i)],
+      ["Recipients", number(N[i])], ["Size", `${bytes(Z[i])} (${number(Z[i])} bytes)`], ["Message ID", M[i]], ["From IP", IP[i] || "-"], ["Message trace ID", ID[i]]];
+    const dl = el("detail-fields"); dl.replaceChildren();
+    for (const [k, v] of fields) { const dt = document.createElement("dt"), dd = document.createElement("dd"); dt.textContent = k; dd.textContent = v; dl.append(dt, dd); }
+    const body = el("detail-recipients"); body.replaceChildren();
+    const list = [];
+    for (let k = RO[i]; k < RO[i + 1]; k++) list.push([RI[k], RS[k]]);
+    list.sort((a, b) => (RANK[statusNames[a[1]]] ?? 5) - (RANK[statusNames[b[1]]] ?? 5) || (people[a[0]] < people[b[0]] ? -1 : 1));
+    for (const [p, s] of list) {
+      const tr = document.createElement("tr"), a = document.createElement("td"), st = document.createElement("td"), route = document.createElement("td");
+      a.textContent = people[p];
+      const pill = document.createElement("span"); pill.className = "pill"; pill.style.setProperty("--dot", colorOf(statusNames[s])); pill.textContent = statusNames[s]; st.append(pill);
+      const events = routes.get(`${i}|${p}`);
+      if (events) {
+        const ol = document.createElement("ol"); ol.className = "route";
+        for (const e of events) {
+          const li = document.createElement("li"), ev = document.createElement("span"), when = document.createElement("span"), desc = document.createElement("div");
+          ev.className = "event"; ev.textContent = e[1] + (e[2] ? ` (${e[2]})` : ""); when.className = "when"; when.textContent = stamp(e[0]);
+          desc.className = "desc"; desc.textContent = e[3] || ""; li.append(ev, when, desc);
+          if (e[4]) { const d = document.createElement("details"); d.className = "raw"; const sm = document.createElement("summary"); sm.textContent = "Data"; const pre = document.createElement("pre"); pre.textContent = e[4]; d.append(sm, pre); li.append(d); }
+          ol.append(li);
+        }
+        route.append(ol);
+      } else { route.className = "muted"; route.textContent = "-"; }
+      tr.append(a, st, route); body.append(tr);
+    }
+    el("detail-recipients-title").textContent = `Recipients (${number(N[i])})`;
+    const more = N[i] - list.length; el("detail-more").hidden = more <= 0;
+    el("detail-more").textContent = `${number(more)} more recipient(s) in the Deliveries CSV file (Report.HtmlRecipientsPerMessage).`;
+    el("copy-recipients").onclick = () => navigator.clipboard && navigator.clipboard.writeText(list.map(x => people[x[0]]).join("; "));
+    el("detail").showModal();
+  }
+  spacer.addEventListener("click", e => { const r = e.target.closest(".grid-row"); if (r) showDetails(Number(r.dataset.row)); });
+  spacer.addEventListener("keydown", e => { if (e.key === "Enter") { const r = e.target.closest(".grid-row"); if (r) showDetails(Number(r.dataset.row)); } });
+  el("detail-close").addEventListener("click", () => el("detail").close());
+
+  // ---- Export of the current view -------------------------------------------------------------
+  el("export").addEventListener("click", () => {
+    const esc = v => { v = v == null ? "" : String(v); if (/^[=+\-@\t\r]/.test(v)) v = "'" + v; return /[";\r\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v; };
+    const header = [`Received (${meta.timeZone})`, "Sender", "Recipients", "Recipient count", "Status", "Subject", "Size (bytes)", "Message ID", "From IP", "Message trace ID"];
+    const parts = ["\ufeff" + header.map(esc).join(";") + "\r\n"]; let buffer = [];
+    for (const i of view) {
+      const rec = []; for (let k = RO[i]; k < RO[i + 1]; k++) rec.push(people[RI[k]]);
+      buffer.push([stamp(T[i]), people[S[i]], rec.join("; "), N[i], statusText(i), subjects[J[i]], Z[i], M[i], IP[i], ID[i]].map(esc).join(";"));
+      if (buffer.length === 5000) { parts.push(buffer.join("\r\n") + "\r\n"); buffer = []; }
+    }
+    if (buffer.length) parts.push(buffer.join("\r\n") + "\r\n");
+    const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob(parts, { type: "text/csv;charset=utf-8" }));
+    a.download = "message-trace-view.csv"; document.body.append(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  });
+
+  // ---- Wiring -----------------------------------------------------------------------------------
+  let timer = null;
+  const later = () => { clearTimeout(timer); timer = setTimeout(applyFilters, 250); };
+  for (const id of ["search", "sender-filter", "recipient-filter", "subject-filter", "message-id-filter"]) el(id).addEventListener("input", later);
+  for (const id of ["status-filter", "date-from", "date-to"]) el(id).addEventListener("change", applyFilters);
+  el("sort").addEventListener("change", () => { sortView(); render(true); });
+  el("clear-filters").addEventListener("click", () => {
+    for (const id of ["search", "sender-filter", "recipient-filter", "subject-filter", "message-id-filter", "status-filter", "date-from", "date-to"]) el(id).value = "";
+    applyFilters();
+  });
+  if (total) { let lo = Infinity, hi = 0; for (let i = 0; i < total; i++) { if (T[i] < lo) lo = T[i]; if (T[i] > hi) hi = T[i]; } for (const id of ["date-from", "date-to"]) { el(id).min = stamp(lo).slice(0, 10); el(id).max = stamp(hi).slice(0, 10); } }
+  applyFilters();
+})();
+</script>
+</body></html>
