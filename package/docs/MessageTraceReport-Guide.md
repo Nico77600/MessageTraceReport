@@ -1,14 +1,14 @@
 ---
 title: Message Trace Report
-subtitle: Administrator guide
+subtitle: Developer guide
 version: 1.1.0
 author: Nicolas Fabert
-updated: 2026-10-02
+updated: 2026-10-08
 ---
 
-# Message Trace Report — Administrator guide
+# Message Trace Report — Developer guide
 
-> Traces Exchange Online messages through the **Microsoft Graph message trace API** (v1.0), keeps them in a **local SQLite history**, and writes **CSV, JSON and HTML** reports. It sends the fewest requests the API allows, never wastes the tenant quota, and never asks twice for what it already holds.
+> Traces Exchange Online messages through the **Microsoft Graph message trace API** (v1.0), keeps them in a **local SQLite history**, and writes **CSV, JSON and HTML** reports. It sends the fewest requests the API allows, never wastes the tenant quota, and never asks twice for what it already holds. The commands used every day are in the [user guide](MessageTraceReport-UserGuide.md).
 
 > [!IMPORTANT]
 > Files downloaded from the Internet may be blocked by Windows and fail to run. Before using this project, unblock every file in the downloaded folder:
@@ -479,9 +479,9 @@ Lab tenant with about 4,200 shared mailboxes and two DLP load tests (150,000 and
 ## Annex D — Versioning and release checklist
 
 ```steps
-Version | `ModuleVersion` in `package\MessageTraceReport.psd1`, `$script:ToolVersion` in the psm1, the `Version` lines of the file headers, the front matter of this guide, `CHANGELOG.md`.
+Version | `ModuleVersion` in `package\MessageTraceReport.psd1`, `$script:ToolVersion` in the psm1, the `Version` lines of the file headers, the front matter of both guides, `CHANGELOG.md`.
 Tests | `Invoke-Pester -Path .\tests` — all green.
-Guide | `.\tools\Build-Documentation.ps1`, then `.\tools\New-ReadmeImages.ps1`.
+Guides | `.\tools\Build-Documentation.ps1`, then `.\tools\New-ReadmeImages.ps1`.
 Package | `.\tools\New-MtrPackage.ps1` — the configuration is emptied of tenant values and checked.
 Release | Tag `vX.Y.Z`, release notes from `CHANGELOG.md`, the zip of the package.
 ```

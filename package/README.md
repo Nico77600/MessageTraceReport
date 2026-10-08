@@ -2,7 +2,7 @@
 
 Exchange Online message trace at scale through the Microsoft Graph API, with a local SQLite history and CSV, JSON and HTML reports.
 
-This folder contains everything needed to run the tool: `Invoke-MessageTraceReport.ps1`, the module and its C# engine, the configuration, the report template, the SQLite library and the guide. Tests and build tools stay outside it, in the repository.
+This folder contains everything needed to run the tool: `Invoke-MessageTraceReport.ps1`, the module and its C# engine, the configuration, the report template, the SQLite library and the guides. Tests and build tools stay outside it, in the repository.
 
 > [!IMPORTANT]
 > Files downloaded from the Internet may be blocked by Windows. Unblock them once, from this folder:
@@ -39,7 +39,7 @@ notepad .\config\MessageTraceReport.config.psd1        # TenantId, AppId, Certif
 | Item | Role |
 |---|---|
 | `config\` | Configuration file to fill in. |
-| `docs\` | Administrator guide, Markdown and self-contained HTML. |
+| `docs\` | User and developer guides, Markdown and self-contained HTML. |
 | `lib\` | Bundled SQLite libraries. |
 | `src\` | PowerShell code and C# engine sources, compiled on first use. |
 | `templates\` | HTML report template. |
@@ -52,7 +52,8 @@ notepad .\config\MessageTraceReport.config.psd1        # TenantId, AppId, Certif
 
 ## Documentation
 
-- [Administrator guide](docs/MessageTraceReport-Guide.md) - also `docs/MessageTraceReport-Guide.html`, a single file to open locally
+- [User guide](docs/MessageTraceReport-UserGuide.md) - also `docs/MessageTraceReport-UserGuide.html`, a single file to open locally
+- [Developer guide](docs/MessageTraceReport-Guide.md) - also `docs/MessageTraceReport-Guide.html`
 
 Project page, releases and change log: https://github.com/Nico77600/MessageTraceReport
 
