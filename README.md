@@ -11,7 +11,8 @@
   <a href="#before--after"><b>Before / after</b></a> &nbsp;&middot;&nbsp;
   <a href="#reports"><b>Reports</b></a> &nbsp;&middot;&nbsp;
   <a href="#quick-start"><b>Quick start</b></a> &nbsp;&middot;&nbsp;
-  <a href="package/docs/MessageTraceReport-Guide.md"><b>Administrator guide</b></a>
+  <a href="package/docs/MessageTraceReport-UserGuide.md"><b>User guide</b></a> &nbsp;&middot;&nbsp;
+  <a href="package/docs/MessageTraceReport-Guide.md"><b>Developer guide</b></a>
 </p>
 
 > [!IMPORTANT]
@@ -97,14 +98,16 @@ notepad .\config\MessageTraceReport.config.psd1        # TenantId, AppId, Certif
 .\Invoke-MessageTraceReport.ps1 -Mode Status
 ```
 
-Coming from `Invoke-MessageTraceGraph.ps1`? Its parameter names are kept as aliases (`-StartDate`, `-Senders`, `-RecipientsCsv` …): see the [migration table](package/docs/MessageTraceReport-Guide.md#14-migrating-from-invoke-messagetracegraphps1). The `package` folder of this repository holds exactly the files needed to run Message Trace Report, with the guide. The zip of each [release](https://github.com/Nico77600/MessageTraceReport/releases) contains the same run-time files with the HTML guide; `.\tools\New-MtrPackage.ps1` builds that zip content from the repository.
+Coming from `Invoke-MessageTraceGraph.ps1`? Its parameter names are kept as aliases (`-StartDate`, `-Senders`, `-RecipientsCsv` …): see the [migration table](package/docs/MessageTraceReport-Guide.md#14-migrating-from-invoke-messagetracegraphps1). The `package` folder of this repository holds exactly the files needed to run Message Trace Report, with both guides. The zip of each [release](https://github.com/Nico77600/MessageTraceReport/releases) contains the same run-time files with the HTML guides; `.\tools\New-MtrPackage.ps1` builds that zip content from the repository.
 
 ## Documentation
 
-The **administrator guide** covers what the Graph API really does, the performance figures, the application registration, every setting, tracing, scheduled collection, the reports, the migration from the original script, troubleshooting and the internals:
+| Guide | Content |
+|---|---|
+| **[User guide](package/docs/MessageTraceReport-UserGuide.md)** | What you need before the first trace, the one-time setup in the `package` folder or the extracted release, then one command per everyday question: a sender, a domain, a list of addresses, a message ID, why a recipient did not get it, the daily collection, a report from the database. Where the files are written, how to read the HTML report, the exit codes, and the situations that come back with what to do. |
+| **[Developer guide](package/docs/MessageTraceReport-Guide.md)** | Everything else: what the Graph API really does and the lab measurements, the performance figures, the prerequisites and the application registration, every configuration key, tracing and the routes in detail, the scheduled collection, the reports and their columns, exit codes and logs, the migration from the original script, the internals and how to test a change, troubleshooting and the Graph calls. |
 
-- [package/docs/MessageTraceReport-Guide.md](package/docs/MessageTraceReport-Guide.md)
-- `package/docs/MessageTraceReport-Guide.html` — the same guide as a single HTML file (download it and open it locally)
+Both guides also exist as a single HTML file with a light and a dark theme (`package/docs/MessageTraceReport-UserGuide.html`, `package/docs/MessageTraceReport-Guide.html`): download them and open them locally, or use the copies in the release zip.
 
 ## Tests
 
@@ -113,7 +116,7 @@ Invoke-Pester -Path .\tests          # Pester 5+, in-memory Graph API, no connec
 .\tests\New-DemoReport.ps1 -Open     # a report of fictitious Contoso data, through the real engine
 ```
 
-`tools\Build-Documentation.ps1` rebuilds the HTML guide; `tools\New-ReadmeImages.ps1` renders the graphics of this page from the guide, in a light and a dark version.
+`tools\Build-Documentation.ps1` rebuilds the HTML guides; `tools\New-ReadmeImages.ps1` renders the graphics of this page from the guide, in a light and a dark version.
 
 ## License
 

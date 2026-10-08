@@ -5,11 +5,12 @@
     Copies the files needed to run Message Trace Report into a separate folder, ready to be zipped.
 
 .DESCRIPTION
-    The package contains what Invoke-MessageTraceReport.ps1 needs at run time, the HTML guide, the short
+    The package contains what Invoke-MessageTraceReport.ps1 needs at run time, the HTML guides, the short
     README, the changelog, the licence and the third-party notices:
         Invoke-MessageTraceReport.ps1, MessageTraceReport.psd1, MessageTraceReport.psm1, src\ (PowerShell and
         the C# engine sources, compiled on first use), lib\sqlite\, templates\, config\,
-        docs\MessageTraceReport-Guide.html, README.md, CHANGELOG.md, LICENSE, THIRD-PARTY-NOTICES.md
+        docs\MessageTraceReport-UserGuide.html, docs\MessageTraceReport-Guide.html, README.md, CHANGELOG.md,
+        LICENSE, THIRD-PARTY-NOTICES.md
     It never copies data\, reports\, logs\, bin\, the tests or the tools: no tenant data is in the package.
 
     The configuration file is copied with the tenant values emptied (TenantId, Organization, AppId,
@@ -61,7 +62,7 @@ if (Test-Path -LiteralPath $Destination) {
 # ---- Files needed at run time ---------------------------------------------------------------------------
 $files = [Collections.Generic.List[string]]::new()
 foreach ($f in 'Invoke-MessageTraceReport.ps1', 'MessageTraceReport.psd1', 'MessageTraceReport.psm1', 'README.md', 'CHANGELOG.md', 'LICENSE', 'THIRD-PARTY-NOTICES.md',
-    'templates\Report.template.html', 'docs\MessageTraceReport-Guide.html') { $files.Add($f) }
+    'templates\Report.template.html', 'docs\MessageTraceReport-UserGuide.html', 'docs\MessageTraceReport-Guide.html') { $files.Add($f) }
 Get-ChildItem -LiteralPath (Join-Path $packageRoot 'src') -File | Where-Object Extension -in '.ps1', '.cs' | ForEach-Object { $files.Add("src\$($_.Name)") }
 Get-ChildItem -LiteralPath (Join-Path $packageRoot 'lib\sqlite') -Recurse -File | ForEach-Object { $files.Add($_.FullName.Substring($packageRoot.Length + 1)) }
 
