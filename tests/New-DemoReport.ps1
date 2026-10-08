@@ -26,7 +26,8 @@
 [CmdletBinding()]
 param([string]$OutputPath, [int]$Messages = 2400, [switch]$Open)
 $ErrorActionPreference = 'Stop'
-$root = Split-Path $PSScriptRoot -Parent
+$repoRoot = Split-Path $PSScriptRoot -Parent
+$root = Join-Path $repoRoot 'package'
 Import-Module (Join-Path $root 'MessageTraceReport.psd1') -Force
 Initialize-MtrEngine -Root $root
 if (-not ('MtrTests.FakeGraph' -as [type])) {

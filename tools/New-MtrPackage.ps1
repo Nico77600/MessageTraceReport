@@ -5,8 +5,8 @@
     Copies the files needed to run Message Trace Report into a separate folder, ready to be zipped.
 
 .DESCRIPTION
-    The package contains what Invoke-MessageTraceReport.ps1 needs at run time, the HTML guide, the README, the
-    changelog, the licence and the third-party notices:
+    The package contains what Invoke-MessageTraceReport.ps1 needs at run time, the HTML guide, the short
+    README, the changelog, the licence and the third-party notices:
         Invoke-MessageTraceReport.ps1, MessageTraceReport.psd1, MessageTraceReport.psm1, src\ (PowerShell and
         the C# engine sources, compiled on first use), lib\sqlite\, templates\, config\,
         docs\MessageTraceReport-Guide.html, README.md, CHANGELOG.md, LICENSE, THIRD-PARTY-NOTICES.md
@@ -17,7 +17,7 @@
     the emptied values appears in the package, and that the SQLite binaries match THIRD-PARTY-NOTICES.md.
 
 .PARAMETER Destination
-    Package folder. Default: package\MessageTraceReport-<version>, next to the tool folder.
+    Package folder. Default: package\MessageTraceReport-<version>, next to the repository folder.
 
 .PARAMETER Zip
     Also writes <Destination>.zip.
@@ -42,12 +42,13 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
-$version = (Import-PowerShellDataFile (Join-Path $root 'MessageTraceReport.psd1')).ModuleVersion
+$packageRoot = Join-Path $root 'package'
+$version = (Import-PowerShellDataFile (Join-Path $packageRoot 'MessageTraceReport.psd1')).ModuleVersion
 if (-not $Destination) { $Destination = Join-Path (Split-Path $root -Parent) "package\MessageTraceReport-$version" }
 $Destination = [IO.Path]::GetFullPath($Destination, (Get-Location).Path).TrimEnd('\')
 
-$rootPrefix = [IO.Path]::GetFullPath($root).TrimEnd('\') + '\'
-if (($Destination + '\').StartsWith($rootPrefix, [StringComparison]::OrdinalIgnoreCase) -or $rootPrefix.StartsWith($Destination + '\', [StringComparison]::OrdinalIgnoreCase)) {
+$repoPrefix = [IO.Path]::GetFullPath($root).TrimEnd('\') + '\'
+if (($Destination + '\').StartsWith($repoPrefix, [StringComparison]::OrdinalIgnoreCase) -or $repoPrefix.StartsWith($Destination + '\', [StringComparison]::OrdinalIgnoreCase)) {
     throw "The destination must be outside the tool folder: $Destination"
 }
 if (Test-Path -LiteralPath $Destination) {
@@ -61,11 +62,11 @@ if (Test-Path -LiteralPath $Destination) {
 $files = [Collections.Generic.List[string]]::new()
 foreach ($f in 'Invoke-MessageTraceReport.ps1', 'MessageTraceReport.psd1', 'MessageTraceReport.psm1', 'README.md', 'CHANGELOG.md', 'LICENSE', 'THIRD-PARTY-NOTICES.md',
     'templates\Report.template.html', 'docs\MessageTraceReport-Guide.html') { $files.Add($f) }
-Get-ChildItem -LiteralPath (Join-Path $root 'src') -File | Where-Object Extension -in '.ps1', '.cs' | ForEach-Object { $files.Add("src\$($_.Name)") }
-Get-ChildItem -LiteralPath (Join-Path $root 'lib\sqlite') -Recurse -File | ForEach-Object { $files.Add($_.FullName.Substring($rootPrefix.Length)) }
+Get-ChildItem -LiteralPath (Join-Path $packageRoot 'src') -File | Where-Object Extension -in '.ps1', '.cs' | ForEach-Object { $files.Add("src\$($_.Name)") }
+Get-ChildItem -LiteralPath (Join-Path $packageRoot 'lib\sqlite') -Recurse -File | ForEach-Object { $files.Add($_.FullName.Substring($packageRoot.Length + 1)) }
 
 foreach ($f in $files) {
-    $source = Join-Path $root $f
+    $source = if ($f -eq 'CHANGELOG.md') { Join-Path $root $f } else { Join-Path $packageRoot $f }
     if (-not (Test-Path -LiteralPath $source -PathType Leaf)) { throw "Missing file in the tool folder: $f" }
     $target = Join-Path $Destination $f
     [void][IO.Directory]::CreateDirectory((Split-Path $target -Parent))
@@ -74,7 +75,7 @@ foreach ($f in $files) {
 
 # ---- Configuration with the tenant values emptied -------------------------------------------------------
 $configRelative = 'config\MessageTraceReport.config.psd1'
-$config = [IO.File]::ReadAllText((Join-Path $root $configRelative))
+$config = [IO.File]::ReadAllText((Join-Path $packageRoot $configRelative))
 $emptied = [Collections.Generic.List[string]]::new()
 foreach ($key in 'TenantId', 'Organization', 'AppId', 'CertificateThumbprint', 'UserPrincipalName', 'SenderFile', 'RecipientFile') {
     $pattern = "(?m)^(\s*$key\s*=\s*)'([^']*)'"

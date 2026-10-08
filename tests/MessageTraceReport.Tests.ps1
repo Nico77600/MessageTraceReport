@@ -13,7 +13,8 @@
 #>
 
 BeforeAll {
-    $script:Root = Split-Path $PSScriptRoot -Parent
+    $script:RepoRoot = Split-Path $PSScriptRoot -Parent
+    $script:Root = Join-Path $script:RepoRoot 'package'
     Import-Module (Join-Path $script:Root 'MessageTraceReport.psd1') -Force
     Initialize-MtrEngine -Root $script:Root
     if (-not ('MtrTests.FakeGraph' -as [type])) {

@@ -2,7 +2,7 @@
 
 <#
 .SYNOPSIS
-    Builds docs\MessageTraceReport-Guide.html from docs\MessageTraceReport-Guide.md.
+    Builds package\docs\MessageTraceReport-Guide.html from package\docs\MessageTraceReport-Guide.md.
 
 .DESCRIPTION
     The Markdown guide stays readable as plain text (and on GitHub / Azure DevOps). This script
@@ -34,8 +34,8 @@
 #>
 [CmdletBinding()]
 param(
-    [string]$Source = (Join-Path $PSScriptRoot '..\docs\MessageTraceReport-Guide.md'),
-    [string]$Destination = (Join-Path $PSScriptRoot '..\docs\MessageTraceReport-Guide.html')
+    [string]$Source = (Join-Path $PSScriptRoot '..\package\docs\MessageTraceReport-Guide.md'),
+    [string]$Destination = (Join-Path $PSScriptRoot '..\package\docs\MessageTraceReport-Guide.html')
 )
 $ErrorActionPreference = 'Stop'
 $Source = (Resolve-Path $Source).Path

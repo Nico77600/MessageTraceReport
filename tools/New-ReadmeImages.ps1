@@ -12,15 +12,15 @@
     them with <picture>, which picks the light or dark image from the theme of the reader.
 
     Sources:
-      docs\MessageTraceReport-Guide.md       the cards and flow blocks (chapters 1 and 2), the version
-      docs\MessageTraceReport-Guide.html     the CSS (run tools\Build-Documentation.ps1 first)
+      package\docs\MessageTraceReport-Guide.md       the cards and flow blocks (chapters 1 and 2), the version
+      package\docs\MessageTraceReport-Guide.html     the CSS (run tools\Build-Documentation.ps1 first)
       tools\Build-Documentation.ps1          the icons
 
     Screenshots: Microsoft Edge in headless mode, with a temporary profile, 2x resolution. Only local files
-    are opened. Output: docs\images\readme-<name>-light.png and readme-<name>-dark.png.
+    are opened. Output: package\docs\images\readme-<name>-light.png and readme-<name>-dark.png.
 
 .PARAMETER OutputFolder
-    Default: docs\images next to the tools folder.
+    Default: package\docs\images next to the tools folder.
 
 .PARAMETER KeepWork
     Keeps the work folder (the HTML pages of the graphics) and shows its path.
@@ -40,7 +40,7 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
-if (-not $OutputFolder) { $OutputFolder = Join-Path $root 'docs\images' }
+if (-not $OutputFolder) { $OutputFolder = Join-Path $root 'package\docs\images' }
 
 #region Assets of the guide ------------------------------------------------------------------------
 function ConvertTo-ReadmeInline([string]$Text) {
@@ -54,9 +54,9 @@ function ConvertTo-ReadmeInline([string]$Text) {
 function Get-ReadmeAssets {
     param([string]$Root)
     $builder = Join-Path $Root 'tools\Build-Documentation.ps1'
-    $guideHtml = Join-Path $Root 'docs\MessageTraceReport-Guide.html'
-    $guideMd = Join-Path $Root 'docs\MessageTraceReport-Guide.md'
-    if (-not (Test-Path $guideHtml)) { throw 'docs\MessageTraceReport-Guide.html not found: run tools\Build-Documentation.ps1 first (it holds the CSS of the graphics).' }
+    $guideHtml = Join-Path $Root 'package\docs\MessageTraceReport-Guide.html'
+    $guideMd = Join-Path $Root 'package\docs\MessageTraceReport-Guide.md'
+    if (-not (Test-Path $guideHtml)) { throw 'package\docs\MessageTraceReport-Guide.html not found: run tools\Build-Documentation.ps1 first (it holds the CSS of the graphics).' }
     # Icons: the $Icons table of the documentation builder, read without running the builder.
     $ast = [System.Management.Automation.Language.Parser]::ParseFile($builder, [ref]$null, [ref]$null)
     $assign = $ast.Find({ param($n) $n -is [System.Management.Automation.Language.AssignmentStatementAst] -and $n.Left.Extent.Text -eq '$Icons' }, $true)

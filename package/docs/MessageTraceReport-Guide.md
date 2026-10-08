@@ -479,7 +479,7 @@ Lab tenant with about 4,200 shared mailboxes and two DLP load tests (150,000 and
 ## Annex D — Versioning and release checklist
 
 ```steps
-Version | `ModuleVersion` in `MessageTraceReport.psd1`, `$script:ToolVersion` in the psm1, the `Version` lines of the file headers, the front matter of this guide, `CHANGELOG.md`.
+Version | `ModuleVersion` in `package\MessageTraceReport.psd1`, `$script:ToolVersion` in the psm1, the `Version` lines of the file headers, the front matter of this guide, `CHANGELOG.md`.
 Tests | `Invoke-Pester -Path .\tests` — all green.
 Guide | `.\tools\Build-Documentation.ps1`, then `.\tools\New-ReadmeImages.ps1`.
 Package | `.\tools\New-MtrPackage.ps1` — the configuration is emptied of tenant values and checked.
