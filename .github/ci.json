@@ -1,0 +1,10 @@
+{
+  "runtimeRoot": "package",
+  "testMode": "pester",
+  "testEntry": null,
+  "tests": [
+    "tests/MessageTraceReport.Tests.ps1"
+  ],
+  "packageBuilder": "tools/New-MtrPackage.ps1",
+  "packageEntry": "Invoke-MessageTraceReport.ps1"
+}
