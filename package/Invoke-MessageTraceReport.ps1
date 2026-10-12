@@ -149,6 +149,12 @@
     Version : 1.1.0
     Exit codes : 0 = success, 1 = failure, 2 = finished but incomplete (see the summary).
     Documentation : docs\MessageTraceReport-Guide.md (or .html)
+
+    Disclaimer:
+    This Script is a Personal project.
+    It's provided "AS-IS". It's not an official Microsoft product so no support can be expected from Microsoft.
+
+    As any scripts you must read carefully the documentation and test it first in a Test environment before any run in Production.
 #>
 [CmdletBinding()]
 param(

@@ -87,6 +87,42 @@ AfterAll {
     Remove-Item -LiteralPath $script:Work -Recurse -Force -ErrorAction SilentlyContinue
 }
 
+Describe 'Runtime disclaimer' {
+    BeforeAll {
+        $script:DisclaimerRepo = Split-Path $PSScriptRoot -Parent
+        $script:DisclaimerConfig = Get-Content (Join-Path $script:DisclaimerRepo '.github\ci.json') -Raw | ConvertFrom-Json
+        $script:DisclaimerRuntime = Join-Path $script:DisclaimerRepo $script:DisclaimerConfig.runtimeRoot
+        $script:DisclaimerPattern = '(?ms)^## Disclaimer[ \t]*\r?\n(?<Body>.*?)(?=^##[ \t]|\z)'
+        $rootReadme = [IO.File]::ReadAllText((Join-Path $script:DisclaimerRepo 'README.md'))
+        $matches = [regex]::Matches($rootReadme, $script:DisclaimerPattern)
+        if ($matches.Count -ne 1) { throw 'The root README must contain exactly one canonical disclaimer.' }
+        $script:CanonicalDisclaimer = $matches[0].Groups['Body'].Value.Trim().Replace("`r`n", "`n")
+        function ConvertTo-DisclaimerParagraphs([string]$Text) {
+            (($Text.Trim() -split '\r?\n[ \t]*\r?\n') | ForEach-Object { ($_ -replace '\s+', ' ').Trim() }) -join "`n`n"
+        }
+    }
+
+    It 'keeps the runtime README disclaimer identical to the canonical root section' {
+        $readme = [IO.File]::ReadAllText((Join-Path $script:DisclaimerRuntime 'README.md'))
+        $matches = [regex]::Matches($readme, $script:DisclaimerPattern)
+        $matches.Count | Should -Be 1
+        $matches[0].Groups['Body'].Value.Trim().Replace("`r`n", "`n") | Should -BeExactly $script:CanonicalDisclaimer
+    }
+
+    It 'keeps the public entry script disclaimer attached to its help with the same wording and paragraphs' {
+        $path = Join-Path $script:DisclaimerRuntime $script:DisclaimerConfig.packageEntry
+        $errors = $null
+        $ast = [Management.Automation.Language.Parser]::ParseFile($path, [ref]$null, [ref]$errors)
+        @($errors).Count | Should -Be 0
+        $help = $ast.GetHelpContent()
+        $help | Should -Not -BeNullOrEmpty
+        $notes = $help.Notes
+        [regex]::Matches($notes, '(?m)^[ \t]*Disclaimer:[ \t]*$').Count | Should -Be 1
+        $body = [regex]::Match($notes, '(?s)(?:^|\r?\n)[ \t]*Disclaimer:[ \t]*\r?\n(?<Body>.*)\z').Groups['Body'].Value
+        (ConvertTo-DisclaimerParagraphs $body) | Should -BeExactly (ConvertTo-DisclaimerParagraphs $script:CanonicalDisclaimer)
+    }
+}
+
 Describe 'Configuration' {
     It 'reports every missing value of the delivered configuration at once' {
         $path = Join-Path $script:Root 'config\MessageTraceReport.config.psd1'
