@@ -187,11 +187,12 @@ while ($queue.Count) {
     $directory = $queue.Dequeue()
     foreach ($item in Microsoft.PowerShell.Management\Get-ChildItem -LiteralPath $directory -Force -ErrorAction Stop) {
         $relative = [IO.Path]::GetRelativePath($rootPath, $item.FullName)
-        if ($directory -ceq $rootPath -and $item.PSIsContainer -and $item.Name -cin @('bin', 'data', 'logs', 'reports')) {
-            continue
-        }
+        # A junction or symbolic link is refused, also for the generated folders that are otherwise not examined.
         if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) {
             throw "Package integrity: protected reparse point: $relative"
+        }
+        if ($directory -ceq $rootPath -and $item.PSIsContainer -and $item.Name -cin @('bin', 'data', 'logs', 'reports')) {
+            continue
         }
         if ($item.PSIsContainer) { $queue.Enqueue($item.FullName); continue }
         # The owner-signed manifest itself (authenticated above, before it was parsed).
