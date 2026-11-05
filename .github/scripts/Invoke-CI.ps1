@@ -126,9 +126,28 @@ switch ($Stage) {
         $builder = Resolve-RepositoryFile $configuration.packageBuilder
         $destination = Join-Path $OutputDirectory 'package'
         if (Test-Path -LiteralPath $destination) { throw 'The package output already exists; it will not be overwritten.' }
-        & {
-            Set-StrictMode -Off
-            & $builder -Destination $destination
+        # CI builds an unsigned package: the release is signed and sealed by the owner. The builder is a PowerShell 7 script,
+        # so Windows PowerShell 5.1 starts it through pwsh.
+        $buildArguments = @{ Destination = $destination; Unsigned = $true }
+        if ($PSVersionTable.PSEdition -eq 'Desktop') {
+            $pwsh = Get-Command pwsh -ErrorAction SilentlyContinue
+            if (-not $pwsh) { throw 'PowerShell 7 (pwsh) is required to run the package builder.' }
+            & $pwsh.Source -NoProfile -NonInteractive -File $builder -Destination $destination -Unsigned
+            if ($LASTEXITCODE -ne 0) { throw "The package builder failed with exit code $LASTEXITCODE." }
+        } else {
+            & {
+                Set-StrictMode -Off
+                & $builder @buildArguments
+            }
+        }
+        # A committed manifest is verified in development mode: the files and the PowerShell signatures, not a release folder.
+        $manifest = Join-Path $destination 'PackageIntegrity.psd1'
+        if (Test-Path -LiteralPath $manifest -PathType Leaf) {
+            $verifier = Join-Path $destination 'src\Test-PackageIntegrity.ps1'
+            if ($PSVersionTable.PSEdition -eq 'Desktop') {
+                & $pwsh.Source -NoProfile -NonInteractive -File $verifier -Root $destination -DevelopmentMode | Out-Null
+                if ($LASTEXITCODE -ne 0) { throw 'The package integrity verification failed.' }
+            } else { & $verifier -Root $destination -DevelopmentMode | Out-Null }
         }
         $entry = Join-Path $destination $configuration.packageEntry
         if (-not (Test-Path -LiteralPath $entry -PathType Leaf)) {

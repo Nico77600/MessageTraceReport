@@ -88,6 +88,7 @@
         Days          = 2
         Senders       = @()
         Recipients    = @()
+        # Absolute paths in the data folder, for example 'C:\Tools\MessageTraceReport-data\vip.csv'.
         SenderFile    = ''
         RecipientFile = ''
         Operator      = 'Or'     # Or: messages from the senders OR to the recipients

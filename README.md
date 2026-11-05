@@ -65,7 +65,7 @@ Each run writes `Messages.csv` (one row per message), `Deliveries.csv` (one row 
 
 | Item | Requirement |
 |---|---|
-| Windows PowerShell or PowerShell 7 | **PowerShell 7.4 or later** (`pwsh`). Windows PowerShell 5.1 is not enough. |
+| PowerShell | **PowerShell 7.4 or later** (`pwsh`). Windows PowerShell 5.1 is not enough. |
 | Modules | None for certificate or secret sign-in. Interactive sign-in uses `Microsoft.Graph.Authentication`. |
 | Permission | An app registration with the Microsoft Graph permission `ExchangeMessageTrace.Read.All` and admin consent. |
 | Tenant | A *service principal* of the Microsoft message trace service: a one-time entry that lets Microsoft Graph answer message trace requests for your tenant. The [user guide](package/docs/MessageTraceReport-UserGuide.md#2-one-time-setup) gives the command. |
@@ -96,7 +96,7 @@ More commands, one per question:
 
 ```powershell
 .\Invoke-MessageTraceReport.ps1 -Recipient *@fabrikam.com -Status Failed -Range Last7Days -Open
-.\Invoke-MessageTraceReport.ps1 -SenderFile C:\Tools\MessageTraceReport-Data\vip.csv -Recipient *@gmail.com -Start 2026-09-01 -End 2026-10-01
+.\Invoke-MessageTraceReport.ps1 -SenderFile C:\Tools\MessageTraceReport-data\vip.csv -Recipient *@gmail.com -Start 2026-09-01 -End 2026-10-01
 .\Invoke-MessageTraceReport.ps1 -MessageId '<CAJ1234@mail.contoso.com>' -Range Last10Days -IncludeDetails   # why each recipient got it or not
 .\Invoke-MessageTraceReport.ps1 -Mode Collect                                     # scheduled task, whole tenant
 .\Invoke-MessageTraceReport.ps1 -Mode Report -Range Last30Days -Sender 'sales-*@contoso.com'
@@ -121,7 +121,7 @@ git clone https://github.com/Nico77600/MessageTraceReport.git
 cd MessageTraceReport
 Invoke-Pester -Path .\tests          # Pester 5+, in-memory Graph API, no connection to Microsoft 365
 .\tests\New-DemoReport.ps1 -Open     # a report of fictitious Contoso data, through the real engine
-.\tools\New-MtrPackage.ps1 -Zip      # builds the release ZIP content
+.\tools\New-MtrPackage.ps1 -Unsigned -Zip -Destination C:\Build\MessageTraceReport   # unsigned package folder and ZIP for tests
 ```
 
 The run-time files are in `package\`. `tools\Build-Documentation.ps1` rebuilds the HTML guides; `tools\New-ReadmeImages.ps1` renders the graphics of this page.

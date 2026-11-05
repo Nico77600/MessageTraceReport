@@ -123,7 +123,7 @@
     Failed messages to Fabrikam over 7 days.
 
 .EXAMPLE
-    .\Invoke-MessageTraceReport.ps1 -SenderFile .\vip.csv -Recipient *@gmail.com -Start 2026-09-01 -End 2026-09-30
+    .\Invoke-MessageTraceReport.ps1 -SenderFile C:\Tools\MessageTraceReport-data\vip.csv -Recipient *@gmail.com -Start 2026-09-01 -End 2026-09-30
     Messages of the VIP list to Gmail in September: one query per VIP and per 10 days; the domain is checked locally.
 
 .EXAMPLE

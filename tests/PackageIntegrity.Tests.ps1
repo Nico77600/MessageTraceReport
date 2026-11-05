@@ -111,7 +111,8 @@ Describe 'Signed manifest and verifier' {
         foreach ($entry in $script:Entries) {
             Reset-Fixture
             Edit-Protected (Join-Path $script:Fixture $entry.Path)
-            { Invoke-Guard @('Distribution') } | Should -Throw -Because $entry.Path
+            # The signature check of the fixture verifier is stubbed: the refusal comes from the hash.
+            { Invoke-Guard @('Distribution') } | Should -Throw -ExpectedMessage '*SHA256 mismatch*' -Because $entry.Path
         }
     }
     It 'rejects a missing file, for every protected entry' {
@@ -126,8 +127,17 @@ Describe 'Signed manifest and verifier' {
             Reset-Fixture
             [void][IO.Directory]::CreateDirectory((Split-Path (Join-Path $script:Fixture $relative) -Parent))
             Set-Content (Join-Path $script:Fixture $relative) 'not executable'
-            { Invoke-Guard } | Should -Throw -ExpectedMessage '*unexpected stable file*' -Because $relative
+            { Invoke-Guard } | Should -Throw -ExpectedMessage '*unexpected stable file*Move your own files*out of the tool folder*MessageTraceReport-data*download the ZIP again*' -Because $relative
         }
+    }
+    It 'rejects a second copy of the verifier, and one that does not belong to the package root' {
+        $other = Join-Path $TestDrive 'other-root'
+        [void][IO.Directory]::CreateDirectory((Join-Path $other 'src'))
+        Copy-Item -LiteralPath (Join-Path $script:Fixture 'src\Test-PackageIntegrity.ps1') -Destination (Join-Path $other 'src')
+        { & (Join-Path $other 'src\Test-PackageIntegrity.ps1') -Root $script:Fixture 3> $null } | Should -Throw -ExpectedMessage '*verifier must belong to this package root*'
+        [void][IO.Directory]::CreateDirectory((Join-Path $script:Fixture 'tools'))
+        Copy-Item -LiteralPath (Join-Path $script:Fixture 'src\Test-PackageIntegrity.ps1') -Destination (Join-Path $script:Fixture 'tools')
+        { Invoke-Guard } | Should -Throw -ExpectedMessage '*unexpected stable file*'
     }
     It 'rejects a junction in a protected subtree' {
         $outside = Join-Path $TestDrive 'junction-target'
@@ -190,7 +200,17 @@ Describe 'Integrity at the entry points' {
         $run = Invoke-Child ("& '$(Join-Path $script:Fixture 'Invoke-MessageTraceReport.ps1')' -Mode Status -DevelopmentMode; 'EXIT=' + `$LASTEXITCODE")
         $run.Text | Should -Match 'owner signature'
     }
-    It 'accepts an unverified source checkout only with -DevelopmentMode' {
+    It 'reaches the configuration check with -DevelopmentMode and a missing or empty configuration, without a Package integrity message' {
+        Reset-Fixture -Source
+        Remove-Item -LiteralPath (Join-Path $script:Fixture 'PackageIntegrity.psd1')
+        $empty = Join-Path $TestDrive 'empty.config.psd1'
+        Set-Content -LiteralPath $empty -Value '@{}'
+        foreach ($config in (Join-Path $TestDrive 'missing.psd1'), $empty) {
+            $run = Invoke-Child ("& '$(Join-Path $script:Fixture 'Invoke-MessageTraceReport.ps1')' -Mode Status -DevelopmentMode -ConfigPath '$config' 3>`$null; 'EXIT=' + `$LASTEXITCODE")
+            $run.Text | Should -Match 'Configuration file not found|Tenant\.TenantId is required'
+            $run.Text | Should -Not -Match 'Package integrity:'
+        }
+    }    It 'accepts an unverified source checkout only with -DevelopmentMode' {
         Reset-Fixture -Source
         Remove-Item -LiteralPath (Join-Path $script:Fixture 'PackageIntegrity.psd1')
         $plain = Invoke-Child ("& '$(Join-Path $script:Fixture 'Invoke-MessageTraceReport.ps1')' -Mode Status; 'EXIT=' + `$LASTEXITCODE")
@@ -219,6 +239,16 @@ Describe 'Engine compilation' {
         Get-ChildItem -LiteralPath $root -Recurse -Filter '*.dll' | Where-Object { $_.FullName -notlike '*\lib\sqlite\*' -and $_.FullName -notlike "$bin\*" } | Should -BeNullOrEmpty
     }
 }
+Describe 'Documentation' {
+    It 'regenerates the HTML guides from their Markdown sources without a difference' {
+        foreach ($name in 'MessageTraceReport-UserGuide', 'MessageTraceReport-Guide') {
+            $target = Join-Path $TestDrive "$name.html"
+            & $script:Pwsh -NoProfile -NonInteractive -File (Join-Path $script:RepoRoot 'tools\Build-Documentation.ps1') -Source (Join-Path $script:Source "docs\$name.md") -Destination $target | Out-Null
+            (Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash | Should -Be (Get-FileHash -LiteralPath (Join-Path $script:Source "docs\$name.html") -Algorithm SHA256).Hash -Because $name
+        }
+    }
+}
+
 Describe 'Owner signatures' -Tag 'RealSignature' {
     BeforeAll {
         $script:Release = $env:MTR_RELEASE_PACKAGE
@@ -239,6 +269,35 @@ Describe 'Owner signatures' -Tag 'RealSignature' {
     It 'accepts the sealed package with the real verifier' {
         if ($script:Skip) { Set-ItResult -Skipped -Because $script:SkipReason; return }
         (& (Join-Path $script:Release 'src\Test-PackageIntegrity.ps1') -Root $script:Release -Distribution).Status | Should -Be 'Valid'
+    }
+    It 'accepts the committed package with the real verifier' {
+        if (-not (Test-Path -LiteralPath (Join-Path $script:Source 'PackageIntegrity.psd1'))) { Set-ItResult -Skipped -Because 'package\PackageIntegrity.psd1 is not committed (before signing)'; return }
+        (& (Join-Path $script:Source 'src\Test-PackageIntegrity.ps1') -Root $script:Source).Status | Should -Be 'Valid (files only)'
+    }
+    It 'rejects a cryptographically valid manifest with its timestamp removed' {
+        if ($script:Skip) { Set-ItResult -Skipped -Because $script:SkipReason; return }
+        Add-Type -AssemblyName System.Security.Cryptography.Pkcs
+        $copy = Join-Path $TestDrive 'real-timestamp'
+        Copy-Item -LiteralPath $script:Release -Destination $copy -Recurse
+        $path = Join-Path $copy 'PackageIntegrity.psd1'
+        $encoding = [Text.UTF8Encoding]::new($false, $true)
+        $text = $encoding.GetString([IO.File]::ReadAllBytes($path))
+        $match = [regex]::Match($text, '(?ms)^# SIG # Begin signature block\r?\n(?<Data>.*?)^# SIG # End signature block\r?\n?\z')
+        $match.Success | Should -BeTrue
+        $cms = [Security.Cryptography.Pkcs.SignedCms]::new()
+        $cms.Decode([Convert]::FromBase64String((($match.Groups['Data'].Value -replace '(?m)^#\s?', '') -replace '\s', '')))
+        foreach ($attribute in @($cms.SignerInfos[0].UnsignedAttributes)) {
+            foreach ($value in $attribute.Values) {
+                $cms.SignerInfos[0].RemoveUnsignedAttribute([Security.Cryptography.AsnEncodedData]::new($attribute.Oid, $value.RawData))
+            }
+        }
+        $base64 = [Convert]::ToBase64String($cms.Encode())
+        $lines = for ($i = 0; $i -lt $base64.Length; $i += 64) { '# ' + $base64.Substring($i, [Math]::Min(64, $base64.Length - $i)) }
+        [IO.File]::WriteAllBytes($path, $encoding.GetBytes($text.Substring(0, $match.Index) +
+            "# SIG # Begin signature block`r`n" + ($lines -join "`r`n") + "`r`n# SIG # End signature block`r`n"))
+        [string](Get-AuthenticodeSignature -LiteralPath $path).Status | Should -Be 'Valid'
+        (Get-AuthenticodeSignature -LiteralPath $path).TimeStamperCertificate | Should -BeNullOrEmpty
+        { & (Join-Path $copy 'src\Test-PackageIntegrity.ps1') -Root $copy -Distribution } | Should -Throw -ExpectedMessage '*expected trusted, timestamped owner signature*'
     }
     It 'rejects an altered manifest and a copy with one changed byte' {
         if ($script:Skip) { Set-ItResult -Skipped -Because $script:SkipReason; return }

@@ -38,6 +38,8 @@ if ($Distribution -and $DevelopmentMode) { throw 'Package integrity: -Distributi
 $signer = '0F28E442889F17B5F4D251E8F96E7CC6E2C9C6D6'
 # What to do, at the end of the refusals an unsigned or re-saved package meets first.
 $releaseHint = 'Download the release ZIP again from https://github.com/Nico77600/MessageTraceReport/releases/latest, extract it and unblock it. A modified, re-saved or unsigned file cannot be started. A developer or CI copy is started from its folder with -DevelopmentMode.'
+# Shown with an unknown file: it is the user's own file, not a damaged package.
+$userFilesHint = 'Move your own files (address lists, certificates, copies of the configuration) out of the tool folder, for example to C:\Tools\MessageTraceReport-data\. A file of the package that is changed or missing: download the ZIP again from https://github.com/Nico77600/MessageTraceReport/releases/latest.'
 $rootPath = [IO.Path]::GetFullPath($Root).TrimEnd('\')
 $signed = @(
     'Invoke-MessageTraceReport.ps1'
@@ -196,7 +198,7 @@ while ($queue.Count) {
         if ($relative -ceq 'PackageIntegrity.psd1') { continue }
         if ($relative -cin $editableFiles -or $relative -cin $sourceDocuments) { continue }
         if ($relative -cin $inventory) { continue }
-        throw "Package integrity: unexpected stable file: $relative"
+        throw "Package integrity: unexpected stable file: $relative. $userFilesHint"
     }
 }
 [pscustomobject]@{

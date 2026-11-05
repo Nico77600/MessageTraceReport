@@ -147,6 +147,9 @@ if ($PSCmdlet.ParameterSetName -eq 'Manifest') {
 # ---- -Seal ----------------------------------------------------------------------------------------------
 if ($PSCmdlet.ParameterSetName -eq 'Seal') {
     $Seal = [IO.Path]::GetFullPath($Seal, (Get-Location).Path).TrimEnd('\')
+    foreach ($name in 'data', 'reports', 'logs', 'bin') {
+        if (Test-Path -LiteralPath (Join-Path $Seal $name)) { throw "The folder contains a $name\ folder (a package that has been run, or generated files): build a clean folder instead: $Seal" }
+    }
     $signedManifest = Join-Path $packageRoot 'PackageIntegrity.psd1'
     if (-not (Test-Path -LiteralPath $signedManifest)) { throw "Copy the signed manifest to $signedManifest first." }
     $sealed = Join-Path $Seal 'PackageIntegrity.psd1'
@@ -163,6 +166,9 @@ if ($PSCmdlet.ParameterSetName -eq 'Seal') {
         if ((Get-FileHash -LiteralPath $sourceFile -Algorithm SHA256).Hash -ne (Get-FileHash -LiteralPath (Join-Path $Seal $relative) -Algorithm SHA256).Hash) {
             throw "The packaged file differs from the repository file: $relative"
         }
+    }
+    if ((Get-FileHash -LiteralPath (Join-Path $root 'CHANGELOG.md') -Algorithm SHA256).Hash -ne (Get-FileHash -LiteralPath (Join-Path $Seal 'CHANGELOG.md') -Algorithm SHA256).Hash) {
+        throw 'The packaged CHANGELOG.md differs from the CHANGELOG.md of the repository.'
     }
     $bad = @(Test-ReadmeLink $Seal)
     if ($bad.Count) { throw "README.md links files that are not in the package: $($bad -join ', ')" }

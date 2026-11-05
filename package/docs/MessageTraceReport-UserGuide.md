@@ -47,6 +47,8 @@ Words used in this guide:
 | Word | Plain meaning |
 |---|---|
 | Tenant | Your organization in Microsoft 365. Its tenant ID is a long identifier (a GUID). |
+| SHA256 | A fingerprint of 64 characters computed from a file. Two files with the same SHA256 are identical; one changed byte gives another value. |
+| NTFS permissions | The Windows right to open, change or list a folder. They are set in the folder properties, tab Security. |
 | Microsoft Graph | The Microsoft web service that gives access to Microsoft 365 data, here the message trace. |
 | App registration | The identity you create for this tool in Microsoft Entra ID, so that it can sign in without a person. |
 | Admin consent | A click by an administrator that allows the app to use the permission. Without it the permission does nothing. |
@@ -58,7 +60,7 @@ Words used in this guide:
 > The tool is **read-only** for Microsoft 365: it only asks for message traces and changes nothing in the tenant. The database, the reports and the logs stay on the local disk.
 
 > [!WARNING]
-> `data\`, `reports\` and `logs\` contain e-mail addresses and subjects. Restrict the NTFS permissions of the tool folder to the administrators who run it.
+> `data\`, `reports\` and `logs\` contain e-mail addresses and subjects. Restrict the permissions of the tool folder (properties, tab Security) to the administrators who run it.
 
 <!-- icon: download -->
 ## 2. One-time setup
@@ -66,7 +68,7 @@ Words used in this guide:
 Do the steps in order, in the same PowerShell 7 window, from step 2 on. Each step says what to do, what you should see, and what to do if not. The sample folder is `C:\Tools\MessageTraceReport-1.1.1`; use your own if you prefer.
 
 > [!NOTE]
-> Keep your own files (address lists, the certificate file) **outside** the tool folder, for example in `C:\Tools\MessageTraceReport-Data`. The tool checks its own folder at every start and refuses a folder that holds a file it does not know. Reports, the database and logs are written to their own sub-folders, which are not checked.
+> Keep your own files (address lists, the certificate file) **outside** the tool folder, for example in `C:\Tools\MessageTraceReport-data`. The tool checks its own folder at every start and refuses a folder that holds a file it does not know. Reports, the database and logs are written to their own sub-folders, which are not checked.
 
 ### Check the download
 
@@ -81,7 +83,7 @@ Get-AuthenticodeSignature C:\Tools\MessageTraceReport-1.1.1\Invoke-MessageTraceR
 
 **You should see:** the same 64 characters as in the release notes, then `Status : Valid` and a signer named *Nicolas Fabert*.
 
-**If not:** download the ZIP again from the Releases page and extract it again. At every start the tool refuses a modified, re-saved or unsigned file with a message that starts with `Package integrity:` and does nothing else. The cause is a damaged or altered download, or a file added to the tool folder; the cure is a fresh download.
+**If not:** download the ZIP again from the Releases page and extract it again. At every start the tool refuses a modified, re-saved or unsigned file with a message that starts with `Package integrity:` and does nothing else. If the message names a file that you added to the tool folder (a list, a certificate, a copy of the configuration), move it out, for example to `C:\Tools\MessageTraceReport-data\`; a file of the release that is changed or missing means a damaged or altered download, and the cure is a fresh download.
 
 ### 1 · Get the files
 
@@ -122,8 +124,8 @@ Get-ChildItem . -Recurse -File -Force | Unblock-File
 
 ```powershell
 $cert = New-SelfSignedCertificate -Subject 'CN=MessageTraceReport' -CertStoreLocation Cert:\CurrentUser\My -KeyExportPolicy NonExportable -KeySpec Signature -KeyAlgorithm RSA -KeyLength 2048 -HashAlgorithm SHA256 -NotAfter (Get-Date).AddYears(2)
-New-Item -ItemType Directory -Force C:\Tools\MessageTraceReport-Data | Out-Null
-Export-Certificate -Cert $cert -FilePath C:\Tools\MessageTraceReport-Data\MessageTraceReport.cer | Out-Null
+New-Item -ItemType Directory -Force C:\Tools\MessageTraceReport-data | Out-Null
+Export-Certificate -Cert $cert -FilePath C:\Tools\MessageTraceReport-data\MessageTraceReport.cer | Out-Null
 $cert.Thumbprint
 ```
 
@@ -145,7 +147,7 @@ $cert.Thumbprint
 
 ### 6 · Upload the certificate
 
-**Do:** in the application, open **Certificates & secrets > Certificates > Upload certificate**, choose `C:\Tools\MessageTraceReport-Data\MessageTraceReport.cer` and click **Add**.
+**Do:** in the application, open **Certificates & secrets > Certificates > Upload certificate**, choose `C:\Tools\MessageTraceReport-data\MessageTraceReport.cer` and click **Add**.
 
 **You should see:** the certificate in the list, with a thumbprint equal to the one of step 4.
 
@@ -241,7 +243,7 @@ Run the commands from that same folder, in PowerShell 7. `-Mode Trace` is the de
 .\Invoke-MessageTraceReport.ps1 -Recipient *@fabrikam.com -Status Failed -Range Last7Days -Open
 
 # A list of VIPs (CSV, column detected) to Gmail in September
-.\Invoke-MessageTraceReport.ps1 -SenderFile C:\Tools\MessageTraceReport-Data\vip.csv -Recipient *@gmail.com -Start 2026-09-01 -End 2026-10-01
+.\Invoke-MessageTraceReport.ps1 -SenderFile C:\Tools\MessageTraceReport-data\vip.csv -Recipient *@gmail.com -Start 2026-09-01 -End 2026-10-01
 
 # From OR to these addresses, with the route of the failed deliveries
 .\Invoke-MessageTraceReport.ps1 -Sender alerts@contoso.com -Recipient helpdesk@contoso.com -Operator Or -IncludeDetails
@@ -352,7 +354,7 @@ The daily log is `logs\MessageTraceReport_<yyyyMMdd>.log`: one line per event, t
 
 | Symptom | Cause | What to do |
 |---|---|---|
-| `Package integrity: ...` at start | A file of the tool folder differs from the signed release, is unsigned, or an unknown file was added to the folder | Download the ZIP again from the [Releases page](https://github.com/Nico77600/MessageTraceReport/releases/latest), extract it again and unblock it. Keep your own files outside the tool folder. |
+| `Package integrity: ...` at start | A file of the release is changed, missing or unsigned (`SHA256 mismatch`, `missing inventory path`, `owner signature`), or your own file is in the tool folder (`unexpected stable file: <name>`) | Changed, missing or unsigned: download the ZIP again from the [Releases page](https://github.com/Nico77600/MessageTraceReport/releases/latest), extract it again and unblock it. Unexpected file: move it out of the tool folder, for example to `C:\Tools\MessageTraceReport-data\`. |
 | `401 … Service principal-less authentication failed … 8bd644d1-…` | The *Transport Data Platform* service principal is missing, or not provisioned yet | Create it (chapter 2, step 8), then wait — up to several hours. |
 | `The application has no application permission ExchangeMessageTrace.Read.All` | Permission not added, or admin consent not granted | Add it and grant admin consent; a new consent can take a few minutes to reach the token. |
 | `403 Permission denied` | Same as above, or the delegated account has no right on message trace | Check the permission and the role of the account. |

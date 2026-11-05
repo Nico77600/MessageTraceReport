@@ -198,7 +198,7 @@ The tool checks the token before the first request: the tenant must be `Tenant.T
 | | `OnlyProblems`, `CompareWithDelivered` | `True`, `True` | Beyond `MaxDeliveries`: only the deliveries not delivered, plus one delivered recipient of each partly delivered message (to see where the routes split). |
 | | `ConsoleMessages` | 3 | A selection of at most this many messages shows its routes in the console. |
 | Collect | `Days` | 2 | `-Mode Collect`: how far back each run checks. |
-| | `Senders`, `Recipients`, `SenderFile`, `RecipientFile`, `Operator` | empty, `Or` | Scope of the collection. Empty = the whole tenant. |
+| | `Senders`, `Recipients`, `SenderFile`, `RecipientFile`, `Operator` | empty, `Or` | Scope of the collection. Empty = the whole tenant. Give `SenderFile` and `RecipientFile` as absolute paths in the data folder (`C:\Tools\MessageTraceReport-data\...`): a relative path is resolved against the tool folder, which must not hold your files. |
 | Storage | `DatabasePath` | `.\data\MessageTraceReport.sqlite` | The history. |
 | | `RetentionDays` | 180 | Deleted by `-Mode Collect` (0 = keep everything). |
 | Report | `DefaultRange` | `Last48Hours` | When no period is given. |
@@ -227,7 +227,7 @@ The tool checks the token before the first request: the tenant must be `Tenant.T
 .\Invoke-MessageTraceReport.ps1 -Recipient *@fabrikam.com -Status Failed -Range Last7Days -Open
 
 # A list of VIPs (CSV, column detected) to Gmail in September
-.\Invoke-MessageTraceReport.ps1 -SenderFile .\vip.csv -Recipient *@gmail.com -Start 2026-09-01 -End 2026-10-01
+.\Invoke-MessageTraceReport.ps1 -SenderFile C:\Tools\MessageTraceReport-data\vip.csv -Recipient *@gmail.com -Start 2026-09-01 -End 2026-10-01
 
 # From OR to these addresses, with the route of the failed deliveries
 .\Invoke-MessageTraceReport.ps1 -Sender alerts@contoso.com -Recipient helpdesk@contoso.com -Operator Or -IncludeDetails
@@ -248,7 +248,7 @@ The tool checks the token before the first request: the tenant must be `Tenant.T
 
 ![The same trace again](images/console-rerun.png)
 
-**Other switches.** `-Format Csv,Html,Json`, `-OutputPath`, `-GridView` (the messages in Out-GridView), `-Refresh` (collect again what the database holds), `-Force` (above `MaxQueries`), `-ConfigPath`.
+**Other switches.** `-Format Csv,Html,Json`, `-OutputPath`, `-GridView` (the messages in Out-GridView), `-Refresh` (collect again what the database holds), `-Force` (above `MaxQueries`), `-ConfigPath` (another configuration file; keep it outside the tool folder, for example `C:\Tools\MessageTraceReport-data\second.config.psd1`, because the tool refuses unknown files in its own folder).
 
 > [!TIP]
 > A long investigation over many addresses can be interrupted with **Ctrl+C**: the pages already received are kept. Run the same command again to continue.
@@ -436,7 +436,7 @@ A release carries three layers of protection, all tied to the owner's code-signi
 - **Signed manifest.** `PackageIntegrity.psd1` lists the SHA256 of every other shipped file: the C# sources, the SQLite libraries, the report template, the HTML guides, `README.md`, `LICENSE`, `THIRD-PARTY-NOTICES.md` and `CHANGELOG.md`. The manifest itself is signed.
 - **Verification at start.** `Invoke-MessageTraceReport.ps1` and the module (on import and before the engine is compiled) call `src\Test-PackageIntegrity.ps1`, after checking that it carries the owner signature. It refuses a bad manifest signature or timestamp, another signer, a changed or missing file, an unknown file and a reparse point (junction or symbolic link). `bin\`, `data\`, `logs\` and `reports\` are not examined. The C# engine is compiled in memory from the verified sources.
 
-A tree without a manifest (a repository clone, a CI build) is accepted only with `-DevelopmentMode`; a present manifest is always verified.
+A tree without a manifest (a CI build) is accepted only with `-DevelopmentMode`; a present manifest is always verified. A clone of the repository holds the signed manifest of the last release: a change to any hashed file of it needs a new manifest (the steps below), and a copy used for development is started with `-DevelopmentMode` only once the manifest is removed from that copy.
 
 Build and sign, from the repository (the signing itself is done with the owner's key, never by the scripts):
 
@@ -451,6 +451,7 @@ Build and sign, from the repository (the signing itself is done with the owner's
 ```
 
 The build refuses unsigned scripts unless `-Unsigned` is given (CI). `-Zip` with `-Unsigned` writes an `-unsigned-ci` ZIP that is never a release. The tests of the verifier are in `tests\PackageIntegrity.Tests.ps1`; the cases tagged `RealSignature` need the signed files, and the one that checks a sealed package reads its folder from the environment variable `MTR_RELEASE_PACKAGE`.
+
 # Annexes
 
 <!-- icon: lifebuoy -->
@@ -506,6 +507,6 @@ Lab tenant with about 4,200 shared mailboxes and two DLP load tests (150,000 and
 Version | `ModuleVersion` in `package\MessageTraceReport.psd1`, `$script:ToolVersion` in the psm1, the `Version` lines of the file headers, the front matter of both guides, `CHANGELOG.md`.
 Tests | `Invoke-Pester -Path .\tests` — all green.
 Guides | `.\tools\Build-Documentation.ps1`, then `.\tools\New-ReadmeImages.ps1`.
-Package | `.\tools\New-MtrPackage.ps1` — the configuration is emptied of tenant values and checked.
-Release | Tag `vX.Y.Z`, release notes from `CHANGELOG.md`, the zip of the package.
+Package | Chapter 17: sign, `.\tools\New-MtrPackage.ps1`, `-Manifest`, sign the manifest, `-Seal`. The configuration is emptied of tenant values and checked.
+Release | Tag `vX.Y.Z`, release notes from `CHANGELOG.md`, the sealed ZIP `MessageTraceReport-X.Y.Z.zip` as the only asset.
 ```
