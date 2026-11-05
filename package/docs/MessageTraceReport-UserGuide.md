@@ -307,6 +307,8 @@ $trigger = New-ScheduledTaskTrigger -Daily -At 02:30
 Register-ScheduledTask -TaskName 'Message Trace Report - Collect' -Action $action -Trigger $trigger -User 'CONTOSO\svc-mtr' -Password (Read-Host 'Password') -RunLevel Limited
 ```
 
+If you scope the collection with `Collect.SenderFile` or `Collect.RecipientFile`, give absolute paths in the data folder, for example `C:\Tools\MessageTraceReport-data\vip.csv`: a relative path would point inside the tool folder, which the tool refuses to start with when it holds your files.
+
 The account of the task must hold the certificate (in its `Cert:\CurrentUser\My`, or `Cert:\LocalMachine\My` with read access to the private key). A first collection of 10 days is ten times longer than a daily one: run it once by hand with `Collect.Days = 10`.
 
 <!-- icon: database -->

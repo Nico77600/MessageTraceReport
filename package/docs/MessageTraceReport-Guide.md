@@ -436,12 +436,12 @@ A release carries three layers of protection, all tied to the owner's code-signi
 - **Signed manifest.** `PackageIntegrity.psd1` lists the SHA256 of every other shipped file: the C# sources, the SQLite libraries, the report template, the HTML guides, `README.md`, `LICENSE`, `THIRD-PARTY-NOTICES.md` and `CHANGELOG.md`. The manifest itself is signed.
 - **Verification at start.** `Invoke-MessageTraceReport.ps1` and the module (on import and before the engine is compiled) call `src\Test-PackageIntegrity.ps1`, after checking that it carries the owner signature. It refuses a bad manifest signature or timestamp, another signer, a changed or missing file, an unknown file and a reparse point (junction or symbolic link). `bin\`, `data\`, `logs\` and `reports\` are not examined. The C# engine is compiled in memory from the verified sources.
 
-A tree without a manifest (a CI build) is accepted only with `-DevelopmentMode`; a present manifest is always verified. A clone of the repository holds the signed manifest of the last release: a change to any hashed file of it needs a new manifest (the steps below), and a copy used for development is started with `-DevelopmentMode` only once the manifest is removed from that copy.
+A tree without a manifest (a CI build) is accepted only with `-DevelopmentMode`; a present manifest is always verified. A clone of the repository holds the signed manifest of the last release. A developer who edits a hashed file after that manifest is committed deletes `package\PackageIntegrity.psd1` in the local copy (never commits that deletion) and starts the tool with `-DevelopmentMode`; the release itself needs a new manifest (the steps below).
 
 Build and sign, from the repository (the signing itself is done with the owner's key, never by the scripts):
 
 ```powershell
-# 1. Sign the PowerShell files of package\ (RFC 3161 timestamp), then build the folder
+# 1. Sign the PowerShell files of package\ (Set-AuthenticodeSignature, then Add-Rfc3161Timestamp.ps1), then build the folder
 .\tools\New-MtrPackage.ps1 -Destination C:\Release\MessageTraceReport-1.1.1
 # 2. Hash the built folder: writes the unsigned PackageIntegrity.psd1 in it
 .\tools\New-MtrPackage.ps1 -Manifest C:\Release\MessageTraceReport-1.1.1

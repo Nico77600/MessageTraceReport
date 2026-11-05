@@ -210,7 +210,8 @@ Describe 'Integrity at the entry points' {
             $run.Text | Should -Match 'Configuration file not found|Tenant\.TenantId is required'
             $run.Text | Should -Not -Match 'Package integrity:'
         }
-    }    It 'accepts an unverified source checkout only with -DevelopmentMode' {
+    }
+    It 'accepts an unverified source checkout only with -DevelopmentMode' {
         Reset-Fixture -Source
         Remove-Item -LiteralPath (Join-Path $script:Fixture 'PackageIntegrity.psd1')
         $plain = Invoke-Child ("& '$(Join-Path $script:Fixture 'Invoke-MessageTraceReport.ps1')' -Mode Status; 'EXIT=' + `$LASTEXITCODE")

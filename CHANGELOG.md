@@ -14,7 +14,7 @@ All notable changes of Message Trace Report. Versions follow [semantic versionin
 
 - **The tool refuses to start when its folder holds a file it does not know.** Keep address lists, certificates and copies of the configuration outside the tool folder, for example in `C:\Tools\MessageTraceReport-data\`, and give `Collect.SenderFile` and `Collect.RecipientFile` as absolute paths.
 - The C# engine is compiled in memory at every start (a few seconds); the `bin\` folder is unused and can be deleted.
-- The release ZIP holds one folder, `MessageTraceReport-1.1.1`, and its README links only files that are in the ZIP, including the HTML user guide.
+- The release ZIP holds one folder, `MessageTraceReport-1.1.1`, with the signed list `PackageIntegrity.psd1`, and its README links only files that are in the ZIP, including the HTML user guide.
 - The user guide (everyday use) and the developer guide (internals) are separate; Get started begins from the ZIP of the Releases page, with the expected result and what to do if not at each step, and explains the app registration, the permission, the admin consent and the Microsoft message trace service.
 - Run-time files live in the `package` folder of the repository; the source archive leaves out the tests and tools.
 

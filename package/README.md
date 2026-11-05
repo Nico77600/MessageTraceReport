@@ -22,9 +22,11 @@ This folder contains everything needed to run the tool: `Invoke-MessageTraceRepo
 
 1. **Check PowerShell.** Open a terminal and type `pwsh`, then `$PSVersionTable.PSVersion`. You should see a version that starts with 7 (7.4 or later). If `pwsh` is not found, install PowerShell 7, then open a new window. If the version starts with 5, you opened Windows PowerShell: use `pwsh`.
 2. **Open this folder** in that window, for example `cd C:\Tools\MessageTraceReport-1.1.1`, then run the unblock command above. You should see no output. If a file is refused, close the programs that use the folder and run it again.
-3. **Set up the application once and fill in the configuration**: follow chapter 2 of the user guide, `docs\MessageTraceReport-UserGuide.html` (double-click it, it opens in your browser). Then edit `config\MessageTraceReport.config.psd1`: `TenantId`, `AppId`, `CertificateThumbprint`. If the tool later lists a wrong value, fix it and run it again. Keep your own files (address lists, certificates, copies of the configuration) outside this folder, for example in `C:\Tools\MessageTraceReport-data\`: the tool refuses a folder that holds a file it does not know.
+3. **Set up the application once and fill in the configuration**: follow chapter 2 of the user guide, `docs\MessageTraceReport-UserGuide.html` (double-click it, it opens in your browser). Then edit `config\MessageTraceReport.config.psd1`: `TenantId`, `AppId`, `CertificateThumbprint`. If the tool later lists a wrong value, fix it and run it again.
 4. **Check without connecting:** `.\Invoke-MessageTraceReport.ps1 -Mode Status`. You should see the banner with your tenant, then *No database yet*, and no red error. If a message starts with `Package integrity:`, a file differs from the signed release: download the ZIP again from the Releases page (an unknown file of yours: move it out of this folder).
 5. **First trace:** `.\Invoke-MessageTraceReport.ps1 -Sender john@contoso.com -Range Last7Days -Open`. You should see a progress line, then the HTML report opens in your browser. If you see `401` or `403`, the service principal or the admin consent is missing: the user guide, chapter 8, gives the cure.
+
+Keep your own files (address lists, certificates, copies of the configuration) outside this folder, for example in `C:\Tools\MessageTraceReport-data\`: the tool refuses a folder that holds a file it does not know. Give list and credential paths as absolute paths.
 
 More everyday commands:
 
