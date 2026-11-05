@@ -47,6 +47,8 @@ Words used in this guide:
 | Word | Plain meaning |
 |---|---|
 | Tenant | Your organization in Microsoft 365. Its tenant ID is a long identifier (a GUID). |
+| Unblock | Windows marks files downloaded from the Internet as blocked and may refuse to run them; `Unblock-File` removes that mark. |
+| Signed list | `PackageIntegrity.psd1`, a file that records the SHA256 of every other file of the release and carries the owner's signature; the tool compares your files with it at every start. |
 | SHA256 | A fingerprint of 64 characters computed from a file. Two files with the same SHA256 are identical; one changed byte gives another value. |
 | NTFS permissions | The Windows right to open, change or list a folder. They are set in the folder properties, tab Security. |
 | Microsoft Graph | The Microsoft web service that gives access to Microsoft 365 data, here the message trace. |
@@ -70,21 +72,6 @@ Do the steps in order, in the same PowerShell 7 window, from step 2 on. Each ste
 > [!NOTE]
 > Keep your own files (address lists, the certificate file) **outside** the tool folder, for example in `C:\Tools\MessageTraceReport-data`. The tool checks its own folder at every start and refuses a folder that holds a file it does not know. Reports, the database and logs are written to their own sub-folders, which are not checked.
 
-### Check the download
-
-The release is a ZIP, `MessageTraceReport-1.1.1.zip`, on the [Releases page](https://github.com/Nico77600/MessageTraceReport/releases/latest). Use that file, not the *Source code* archives. Its PowerShell files carry the owner's timestamped digital signature, and a signed list (`PackageIntegrity.psd1`) records the fingerprint of every other file.
-
-**Do:** compare the fingerprint of the ZIP with the `SHA256` line of the release notes, and read the signature of the entry script after extraction:
-
-```powershell
-(Get-FileHash "$HOME\Downloads\MessageTraceReport-1.1.1.zip" -Algorithm SHA256).Hash
-Get-AuthenticodeSignature C:\Tools\MessageTraceReport-1.1.1\Invoke-MessageTraceReport.ps1 | Format-List Status, SignerCertificate
-```
-
-**You should see:** the same 64 characters as in the release notes, then `Status : Valid` and a signer named *Nicolas Fabert*.
-
-**If not:** download the ZIP again from the Releases page and extract it again. At every start the tool refuses a modified, re-saved or unsigned file with a message that starts with `Package integrity:` and does nothing else. If the message names a file that you added to the tool folder (a list, a certificate, a copy of the configuration), move it out, for example to `C:\Tools\MessageTraceReport-data\`; a file of the release that is changed or missing means a damaged or altered download, and the cure is a fresh download.
-
 ### 1 · Get the files
 
 **Do:** extract `MessageTraceReport-1.1.1.zip` to `C:\Tools`. The ZIP holds one folder, `MessageTraceReport-1.1.1`.
@@ -92,6 +79,21 @@ Get-AuthenticodeSignature C:\Tools\MessageTraceReport-1.1.1\Invoke-MessageTraceR
 **You should see:** `C:\Tools\MessageTraceReport-1.1.1` with `Invoke-MessageTraceReport.ps1`, `README.md` and the folders `config`, `docs`, `lib`, `src` and `templates`.
 
 **If not:** if the files are directly in `C:\Tools`, move them into a folder named `MessageTraceReport-1.1.1`.
+
+### Check the download (after step 1)
+
+The release is a ZIP, `MessageTraceReport-1.1.1.zip`, on the [Releases page](https://github.com/Nico77600/MessageTraceReport/releases/latest). Use that file, not the *Source code* archives. Its PowerShell files carry the owner's timestamped digital signature, and a signed list (`PackageIntegrity.psd1`) records the fingerprint of every other file.
+
+**Do:** once the ZIP is extracted (step 1), compare its fingerprint with the `SHA256` line of the release notes, and read the signature of the entry script:
+
+```powershell
+(Get-FileHash "$HOME\Downloads\MessageTraceReport-1.1.1.zip" -Algorithm SHA256).Hash -eq '<SHA256 from the release notes>'
+Get-AuthenticodeSignature C:\Tools\MessageTraceReport-1.1.1\Invoke-MessageTraceReport.ps1 | Format-List Status, SignerCertificate
+```
+
+**You should see:** `True` (the fingerprint equals the one of the release notes), then `Status : Valid` and a signer named *Nicolas Fabert*.
+
+**If not:** download the ZIP again from the Releases page and extract it again. At every start the tool refuses a modified, re-saved or unsigned file with a message that starts with `Package integrity:` and does nothing else. If the message names a file that you added to the tool folder (a list, a certificate, a copy of the configuration), move it out, for example to `C:\Tools\MessageTraceReport-data\`; a file of the release that is changed or missing means a damaged or altered download, and the cure is a fresh download.
 
 ### 2 · Open PowerShell 7 in that folder
 
@@ -175,7 +177,7 @@ New-MgServicePrincipal -AppId 8bd644d1-64a1-4d4b-ae52-2e0cbf64e373
 
 **You should see:** a sign-in window, then a table with the new service principal.
 
-**If not:** if the message says it already exists, nothing is left to do. After the creation, Microsoft can take up to several hours to provision it: until then the first trace answers `401`, and chapter 8 explains it.
+**If not:** `Install-Module` may ask whether to trust the PSGallery repository: answer `Y` (or add `-Repository PSGallery -Force`). If the message says the service principal already exists, nothing is left to do. After the creation, Microsoft can take up to several hours to provision it: until then the first trace answers `401`, and chapter 8 explains it.
 
 ### 9 · Fill in the configuration
 
@@ -356,6 +358,8 @@ The daily log is `logs\MessageTraceReport_<yyyyMMdd>.log`: one line per event, t
 
 | Symptom | Cause | What to do |
 |---|---|---|
+| `Configuration file not found: <path>` | `-ConfigPath` or the default `config\MessageTraceReport.config.psd1` does not exist | Check the path (use an absolute path in the data folder for your own copy), or restore the file from the ZIP. |
+| `Invalid configuration ... <key> is required` | A value of the configuration file is empty or wrong, for example `Tenant.TenantId` | Fill in the listed keys (chapter 2, step 9). The message lists every wrong value. |
 | `Package integrity: ...` at start | A file of the release is changed, missing or unsigned (`SHA256 mismatch`, `missing inventory path`, `owner signature`), or your own file is in the tool folder (`unexpected stable file: <name>`) | Changed, missing or unsigned: download the ZIP again from the [Releases page](https://github.com/Nico77600/MessageTraceReport/releases/latest), extract it again and unblock it. Unexpected file: move it out of the tool folder, for example to `C:\Tools\MessageTraceReport-data\`. |
 | `401 … Service principal-less authentication failed … 8bd644d1-…` | The *Transport Data Platform* service principal is missing, or not provisioned yet | Create it (chapter 2, step 8), then wait — up to several hours. |
 | `The application has no application permission ExchangeMessageTrace.Read.All` | Permission not added, or admin consent not granted | Add it and grant admin consent; a new consent can take a few minutes to reach the token. |

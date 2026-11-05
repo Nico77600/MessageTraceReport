@@ -224,6 +224,14 @@ footer { margin-top: 48px; padding-top: 20px; border-top: 1px solid var(--cp-bor
 <td>Your organization in Microsoft 365. Its tenant ID is a long identifier (a GUID).</td>
 </tr>
 <tr>
+<td>Unblock</td>
+<td>Windows marks files downloaded from the Internet as blocked and may refuse to run them; <code>Unblock-File</code> removes that mark.</td>
+</tr>
+<tr>
+<td>Signed list</td>
+<td><code>PackageIntegrity.psd1</code>, a file that records the SHA256 of every other file of the release and carries the owner's signature; the tool compares your files with it at every start.</td>
+</tr>
+<tr>
 <td>SHA256</td>
 <td>A fingerprint of 64 characters computed from a file. Two files with the same SHA256 are identical; one changed byte gives another value.</td>
 </tr>
@@ -271,18 +279,18 @@ footer { margin-top: 48px; padding-top: 20px; border-top: 1px solid var(--cp-bor
 <p class="markdown-alert-title"><svg class="icon-sm" viewBox="0 0 16 16" fill="currentColor" version="1.1" width="16" height="16" aria-hidden="true"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
 <p>Keep your own files (address lists, the certificate file) <strong>outside</strong> the tool folder, for example in <code>C:\Tools\MessageTraceReport-data</code>. The tool checks its own folder at every start and refuses a folder that holds a file it does not know. Reports, the database and logs are written to their own sub-folders, which are not checked.</p>
 </div>
-<h3 id="check-the-download">Check the download</h3>
-<p>The release is a ZIP, <code>MessageTraceReport-1.1.1.zip</code>, on the <a href="https://github.com/Nico77600/MessageTraceReport/releases/latest" target="_blank" rel="noopener">Releases page</a>. Use that file, not the <em>Source code</em> archives. Its PowerShell files carry the owner's timestamped digital signature, and a signed list (<code>PackageIntegrity.psd1</code>) records the fingerprint of every other file.</p>
-<p><strong>Do:</strong> compare the fingerprint of the ZIP with the <code>SHA256</code> line of the release notes, and read the signature of the entry script after extraction:</p>
-<div class="code"><div class="code-head"><span>PowerShell</span><button type="button" class="copy"><svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/></svg><span>Copy</span></button></div><pre><code>(Get-FileHash &quot;$HOME\Downloads\MessageTraceReport-1.1.1.zip&quot; -Algorithm SHA256).Hash
-Get-AuthenticodeSignature C:\Tools\MessageTraceReport-1.1.1\Invoke-MessageTraceReport.ps1 | Format-List Status, SignerCertificate
-</code></pre></div>
-<p><strong>You should see:</strong> the same 64 characters as in the release notes, then <code>Status : Valid</code> and a signer named <em>Nicolas Fabert</em>.</p>
-<p><strong>If not:</strong> download the ZIP again from the Releases page and extract it again. At every start the tool refuses a modified, re-saved or unsigned file with a message that starts with <code>Package integrity:</code> and does nothing else. If the message names a file that you added to the tool folder (a list, a certificate, a copy of the configuration), move it out, for example to <code>C:\Tools\MessageTraceReport-data\</code>; a file of the release that is changed or missing means a damaged or altered download, and the cure is a fresh download.</p>
 <h3 id="get-the-files">1 · Get the files</h3>
 <p><strong>Do:</strong> extract <code>MessageTraceReport-1.1.1.zip</code> to <code>C:\Tools</code>. The ZIP holds one folder, <code>MessageTraceReport-1.1.1</code>.</p>
 <p><strong>You should see:</strong> <code>C:\Tools\MessageTraceReport-1.1.1</code> with <code>Invoke-MessageTraceReport.ps1</code>, <code>README.md</code> and the folders <code>config</code>, <code>docs</code>, <code>lib</code>, <code>src</code> and <code>templates</code>.</p>
 <p><strong>If not:</strong> if the files are directly in <code>C:\Tools</code>, move them into a folder named <code>MessageTraceReport-1.1.1</code>.</p>
+<h3 id="check-the-download-after-step-1">Check the download (after step 1)</h3>
+<p>The release is a ZIP, <code>MessageTraceReport-1.1.1.zip</code>, on the <a href="https://github.com/Nico77600/MessageTraceReport/releases/latest" target="_blank" rel="noopener">Releases page</a>. Use that file, not the <em>Source code</em> archives. Its PowerShell files carry the owner's timestamped digital signature, and a signed list (<code>PackageIntegrity.psd1</code>) records the fingerprint of every other file.</p>
+<p><strong>Do:</strong> once the ZIP is extracted (step 1), compare its fingerprint with the <code>SHA256</code> line of the release notes, and read the signature of the entry script:</p>
+<div class="code"><div class="code-head"><span>PowerShell</span><button type="button" class="copy"><svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/></svg><span>Copy</span></button></div><pre><code>(Get-FileHash &quot;$HOME\Downloads\MessageTraceReport-1.1.1.zip&quot; -Algorithm SHA256).Hash -eq '&lt;SHA256 from the release notes&gt;'
+Get-AuthenticodeSignature C:\Tools\MessageTraceReport-1.1.1\Invoke-MessageTraceReport.ps1 | Format-List Status, SignerCertificate
+</code></pre></div>
+<p><strong>You should see:</strong> <code>True</code> (the fingerprint equals the one of the release notes), then <code>Status : Valid</code> and a signer named <em>Nicolas Fabert</em>.</p>
+<p><strong>If not:</strong> download the ZIP again from the Releases page and extract it again. At every start the tool refuses a modified, re-saved or unsigned file with a message that starts with <code>Package integrity:</code> and does nothing else. If the message names a file that you added to the tool folder (a list, a certificate, a copy of the configuration), move it out, for example to <code>C:\Tools\MessageTraceReport-data\</code>; a file of the release that is changed or missing means a damaged or altered download, and the cure is a fresh download.</p>
 <h3 id="open-powershell-7-in-that-folder">2 · Open PowerShell 7 in that folder</h3>
 <p><strong>Do:</strong> in File Explorer, open <code>C:\Tools\MessageTraceReport-1.1.1</code>, click the address bar, type <code>pwsh</code> and press Enter. Then run:</p>
 <div class="code"><div class="code-head"><span>PowerShell</span><button type="button" class="copy"><svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/></svg><span>Copy</span></button></div><pre><code>$PSVersionTable.PSVersion
@@ -330,7 +338,7 @@ Connect-MgGraph -Scopes Application.ReadWrite.All
 New-MgServicePrincipal -AppId 8bd644d1-64a1-4d4b-ae52-2e0cbf64e373
 </code></pre></div>
 <p><strong>You should see:</strong> a sign-in window, then a table with the new service principal.</p>
-<p><strong>If not:</strong> if the message says it already exists, nothing is left to do. After the creation, Microsoft can take up to several hours to provision it: until then the first trace answers <code>401</code>, and chapter 8 explains it.</p>
+<p><strong>If not:</strong> <code>Install-Module</code> may ask whether to trust the PSGallery repository: answer <code>Y</code> (or add <code>-Repository PSGallery -Force</code>). If the message says the service principal already exists, nothing is left to do. After the creation, Microsoft can take up to several hours to provision it: until then the first trace answers <code>401</code>, and chapter 8 explains it.</p>
 <h3 id="fill-in-the-configuration">9 · Fill in the configuration</h3>
 <p><strong>Do:</strong></p>
 <div class="code"><div class="code-head"><span>PowerShell</span><button type="button" class="copy"><svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/></svg><span>Copy</span></button></div><pre><code>notepad .\config\MessageTraceReport.config.psd1
@@ -562,6 +570,16 @@ Register-ScheduledTask -TaskName 'Message Trace Report - Collect' -Action $actio
 </tr>
 </thead>
 <tbody>
+<tr>
+<td><code>Configuration file not found: &lt;path&gt;</code></td>
+<td><code>-ConfigPath</code> or the default <code>config\MessageTraceReport.config.psd1</code> does not exist</td>
+<td>Check the path (use an absolute path in the data folder for your own copy), or restore the file from the ZIP.</td>
+</tr>
+<tr>
+<td><code>Invalid configuration ... &lt;key&gt; is required</code></td>
+<td>A value of the configuration file is empty or wrong, for example <code>Tenant.TenantId</code></td>
+<td>Fill in the listed keys (chapter 2, step 9). The message lists every wrong value.</td>
+</tr>
 <tr>
 <td><code>Package integrity: ...</code> at start</td>
 <td>A file of the release is changed, missing or unsigned (<code>SHA256 mismatch</code>, <code>missing inventory path</code>, <code>owner signature</code>), or your own file is in the tool folder (<code>unexpected stable file: &lt;name&gt;</code>)</td>

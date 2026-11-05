@@ -27,7 +27,6 @@ CHANGELOG.md -text
 /tests/ export-ignore
 /tools/ export-ignore
 /.github/ export-ignore
-/Run-Tests.ps1 export-ignore
 /AGENTS.md export-ignore
 /package/docs/*.md export-ignore
 /package/docs/images/ export-ignore
