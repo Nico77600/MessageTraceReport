@@ -2,7 +2,7 @@
 //  Message Trace Report - engine, part 5: report files
 // -----------------------------------------------------------------------------
 //  Author  : Nicolas Fabert
-//  Version : 1.1.0
+//  Version : 1.1.1
 //
 //  One pass over the selection (newest message first, the deliveries of a message
 //  consecutive) writes every file at once:

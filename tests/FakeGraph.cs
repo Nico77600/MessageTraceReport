@@ -2,7 +2,7 @@
 //  Message Trace Report - tests: in-memory Microsoft Graph message trace API
 // -----------------------------------------------------------------------------
 //  Author  : Nicolas Fabert
-//  Version : 1.1.0
+//  Version : 1.1.1
 //
 //  An HttpMessageHandler given to the engine (CollectorOptions.Handler). It answers like the real
 //  API measured in the lab on 2026-10-02:

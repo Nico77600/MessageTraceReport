@@ -8,25 +8,24 @@
 <p align="center">
   <a href="#why"><b>Why</b></a> &nbsp;&middot;&nbsp;
   <a href="#how-it-works"><b>How it works</b></a> &nbsp;&middot;&nbsp;
-  <a href="#before--after"><b>Before / after</b></a> &nbsp;&middot;&nbsp;
   <a href="#reports"><b>Reports</b></a> &nbsp;&middot;&nbsp;
-  <a href="#quick-start"><b>Quick start</b></a> &nbsp;&middot;&nbsp;
+  <a href="#get-started"><b>Get started</b></a> &nbsp;&middot;&nbsp;
   <a href="package/docs/MessageTraceReport-UserGuide.md"><b>User guide</b></a> &nbsp;&middot;&nbsp;
   <a href="package/docs/MessageTraceReport-Guide.md"><b>Developer guide</b></a>
 </p>
 
 > [!IMPORTANT]
-> Files downloaded from the Internet may be blocked by Windows and fail to run. Before using this project, unblock every file in the downloaded folder:
+> Files downloaded from the Internet may be blocked by Windows and fail to run. Before using this tool, unblock every file in the folder where you extracted it:
 >
 > ```powershell
-> Get-ChildItem "C:\Chemin\Du\Dossier" -Recurse -File -Force | Unblock-File
+> Get-ChildItem "C:\Tools\MessageTraceReport-1.1.1" -Recurse -File -Force | Unblock-File
 > ```
 >
-> Replace the example path with the folder where you downloaded or extracted this project.
+> Replace the example path with the folder where you extracted the release ZIP.
 
 ## Why
 
-The **Microsoft Graph message trace API** traces Exchange Online messages without a PowerShell session — but within strict rules: **100 requests per 5 minutes for the whole tenant**, windows of 10 days, 90 days of history. And one rule it does not document: in `$filter` it keeps **one value per property** and silently ignores `or` — a query for three recipients returns only the last one. This tool plans its requests around these rules, keeps everything it receives in a **local SQLite database**, and never asks twice for what it already holds.
+Message Trace Report answers two everyday questions about Exchange Online mail: **did this message arrive, and who received it?** and **why was it not delivered?** It reads the message trace of Microsoft 365 through the Microsoft Graph API, which has strict limits (about 100 requests per 5 minutes for the whole tenant, 10-day windows, 90 days of history). The tool works within these limits for you, keeps everything it receives in a **local SQLite database** (a single file on your disk, nothing to install) and never asks Microsoft twice for what it already holds.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="package/docs/images/readme-principles-dark.png">
@@ -37,24 +36,15 @@ The **Microsoft Graph message trace API** traces Exchange Online messages withou
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="package/docs/images/readme-how-it-works-dark.png">
-  <img alt="Filter and plan, only what is missing is read from Microsoft Graph at 90 requests per 5 minutes, stored page by page in SQLite, then the full filter is applied locally and the reports are written; four modes: Trace, Collect, Report, Status" src="package/docs/images/readme-how-it-works-light.png">
+  <img alt="Filter and plan, only what is missing is read from Microsoft Graph, stored page by page in SQLite, then the full filter is applied locally and the reports are written; four modes: Trace, Collect, Report, Status" src="package/docs/images/readme-how-it-works-light.png">
 </picture>
 
-- **One query per address of the shorter list** (senders AND recipients), or per address (OR): the other conditions are applied on the database, so the report is exact. `*@domain`, subject, status, message ID and IP addresses are supported.
-- **One shared rolling budget** of 90 requests per 5 minutes (configurable), `Retry-After` honoured, token renewed, network errors retried — and the requests of the last 5 minutes are remembered by the next run.
-- **Page by page into SQLite**: Ctrl+C or a failure keeps what was received; the next run collects only the rest. A period already collected by the same or a wider query is not asked again; only the last hours, which may still change, are.
-- **`-Mode Collect`** every day keeps the whole tenant beyond the 90 days of Graph; `-Mode Report` answers from the database only, with any address pattern.
-- **Why a message was not delivered**: with `-IncludeDetails` the route of each recipient is read and explained — *Blocked by DLP*, *Blocked by mail flow rule (ETR)*, *Recipient not found*, *Mailbox full*, *Quarantined*, *Rejected by remote server*… with the rule, the status code and its Microsoft Learn page, and **where the route of a failed recipient left the route of the delivered ones**.
-- **Read-only**, one permission (`ExchangeMessageTrace.Read.All`), certificate authentication built in — no module to install, SQLite bundled.
-
-## Before / after
-
-`Invoke-MessageTraceGraph.ps1`, the script this tool replaces, against Message Trace Report on the same lab tenant:
-
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="package/docs/images/readme-benchmark-dark.png">
-  <img alt="1 sender AND 3 recipients over 7 days: 31.8 s and 1 recipient of 3 for the original script, 8.5 s and 3 recipients for Message Trace Report. 20 senders over 7 days: 17 min with 8,416 rows lost, 6 min 22 s with every row. The same again: 17 min, 27 s" src="package/docs/images/readme-benchmark-light.png">
-</picture>
+- **You give a filter** (senders, recipients, a domain such as `*@fabrikam.com`, a subject, a status, a message ID or an IP address). The tool works out what Microsoft must be asked and what it can answer from its own database, so the report is exact.
+- **It stays inside the Microsoft limits**: it spaces its requests, waits when Microsoft asks it to and retries after a network error.
+- **It is safe to interrupt**: press Ctrl+C or lose the network, and what was received is kept; the next run collects only the rest.
+- **`-Mode Collect`** run every day keeps the whole tenant beyond the 90 days that Microsoft keeps; `-Mode Report` answers from the database alone, with any address pattern.
+- **Why a message was not delivered**: with `-IncludeDetails`, each recipient gets a plain-words cause such as *Blocked by DLP*, *Blocked by mail flow rule (ETR)*, *Recipient not found*, *Mailbox full*, *Quarantined* or *Rejected by remote server*, with the rule, the status code and its Microsoft Learn page, and the point where the route of a failed recipient left the route of the delivered ones.
+- **Read-only**: one permission (`ExchangeMessageTrace.Read.All`), certificate sign-in, nothing to install.
 
 ## Reports
 
@@ -69,54 +59,72 @@ The **Microsoft Graph message trace API** traces Exchange Online messages withou
   </tr>
 </table>
 
-Each run writes `Messages.csv` (one row per message), `Deliveries.csv` (one row per message and recipient, what Graph returns, with the route, cause and reason when read), `Routes.csv` (one row per step of the routes read), `Senders.csv` and `Recipients.csv` (per day), optionally JSON with the Graph property names, and a self-contained HTML report that stays fast with 200,000 messages.
+Each run writes `Messages.csv` (one row per message), `Deliveries.csv` (one row per message and recipient), `Routes.csv` (one row per step of the routes read), `Senders.csv` and `Recipients.csv` (per day), optionally JSON files, and a self-contained HTML report that stays fast with 200,000 messages.
 
 ## Requirements
 
 | Item | Requirement |
 |---|---|
-| PowerShell | 7.4 or later, Windows |
-| Modules | None (certificate or secret). Interactive sign-in: `Microsoft.Graph.Authentication` |
-| Permission | Microsoft Graph `ExchangeMessageTrace.Read.All` with admin consent |
-| Tenant | The service principal of the Microsoft application `8bd644d1-64a1-4d4b-ae52-2e0cbf64e373` ([guide, chapter 7](package/docs/MessageTraceReport-Guide.md#7-application-registration)) |
-| SQLite | Bundled in `lib\sqlite` — nothing to install |
+| PowerShell | **PowerShell 7.4 or later** (`pwsh`). Windows PowerShell 5.1 is not enough. |
+| Modules | None for certificate or secret sign-in. Interactive sign-in uses `Microsoft.Graph.Authentication`. |
+| Permission | An app registration with the Microsoft Graph permission `ExchangeMessageTrace.Read.All` and admin consent. |
+| Tenant | A *service principal* of the Microsoft message trace service: a one-time entry that lets Microsoft Graph answer message trace requests for your tenant. The [user guide](package/docs/MessageTraceReport-UserGuide.md#2-one-time-setup) gives the command. |
+| SQLite | Bundled in `lib\sqlite`, nothing to install. |
 
-## Quick start
+## Get started
+
+1. **Download** `MessageTraceReport-1.1.1.zip` from the [latest release](https://github.com/Nico77600/MessageTraceReport/releases/latest) (use this file, not the *Source code* archives).
+2. **Extract** it, for example to `C:\Tools\MessageTraceReport-1.1.1`. The ZIP holds one folder, `MessageTraceReport-1.1.1`.
+3. **Open PowerShell 7.** In File Explorer, open the extracted folder, click the address bar, type `pwsh` and press Enter. Check it:
+
+   ```powershell
+   $PSVersionTable.PSVersion
+   Get-ChildItem . -Recurse -File -Force | Unblock-File
+   ```
+
+   You should see a version that starts with 7 (7.4 or later), then no output from the second command. If `pwsh` is not recognized, install PowerShell 7 first.
+4. **Set up the application once and fill in the configuration**, as chapter 2 of the user guide explains, step by step (`docs\MessageTraceReport-UserGuide.html` in the ZIP; double-click it).
+5. **Run your first trace:**
+
+   ```powershell
+   .\Invoke-MessageTraceReport.ps1 -Sender john@contoso.com -Range Last7Days -Open
+   ```
+
+   You should see the plan, a progress line, the list of files written under `reports\`, and the HTML report opening in your browser.
+
+More commands, one per question:
 
 ```powershell
-git clone https://github.com/Nico77600/MessageTraceReport.git
-cd MessageTraceReport\package
-notepad .\config\MessageTraceReport.config.psd1        # TenantId, AppId, CertificateThumbprint
-
-.\Invoke-MessageTraceReport.ps1 -Sender john@contoso.com                          # last 48 hours
 .\Invoke-MessageTraceReport.ps1 -Recipient *@fabrikam.com -Status Failed -Range Last7Days -Open
-.\Invoke-MessageTraceReport.ps1 -SenderFile .\vip.csv -Recipient *@gmail.com -Start 2026-09-01 -End 2026-10-01
-.\Invoke-MessageTraceReport.ps1 -Sender alerts@contoso.com -Recipient helpdesk@contoso.com -Operator Or -IncludeDetails
+.\Invoke-MessageTraceReport.ps1 -SenderFile C:\Tools\MessageTraceReport-data\vip.csv -Recipient *@gmail.com -Start 2026-09-01 -End 2026-10-01
 .\Invoke-MessageTraceReport.ps1 -MessageId '<CAJ1234@mail.contoso.com>' -Range Last10Days -IncludeDetails   # why each recipient got it or not
 .\Invoke-MessageTraceReport.ps1 -Mode Collect                                     # scheduled task, whole tenant
 .\Invoke-MessageTraceReport.ps1 -Mode Report -Range Last30Days -Sender 'sales-*@contoso.com'
 .\Invoke-MessageTraceReport.ps1 -Mode Status
 ```
 
-Coming from `Invoke-MessageTraceGraph.ps1`? Its parameter names are kept as aliases (`-StartDate`, `-Senders`, `-RecipientsCsv` …): see the [migration table](package/docs/MessageTraceReport-Guide.md#14-migrating-from-invoke-messagetracegraphps1). The `package` folder of this repository holds exactly the files needed to run Message Trace Report, with both guides. The zip of each [release](https://github.com/Nico77600/MessageTraceReport/releases) contains the same run-time files with the HTML guides; `.\tools\New-MtrPackage.ps1` builds that zip content from the repository.
+Coming from `Invoke-MessageTraceGraph.ps1`? Its parameter names are kept as aliases (`-StartDate`, `-Senders`, `-RecipientsCsv` ...): see the [migration table](package/docs/MessageTraceReport-Guide.md#14-migrating-from-invoke-messagetracegraphps1).
 
 ## Documentation
 
 | Guide | Content |
 |---|---|
-| **[User guide](package/docs/MessageTraceReport-UserGuide.md)** | What you need before the first trace, the one-time setup in the `package` folder or the extracted release, then one command per everyday question: a sender, a domain, a list of addresses, a message ID, why a recipient did not get it, the daily collection, a report from the database. Where the files are written, how to read the HTML report, the exit codes, and the situations that come back with what to do. |
-| **[Developer guide](package/docs/MessageTraceReport-Guide.md)** | Everything else: what the Graph API really does and the lab measurements, the performance figures, the prerequisites and the application registration, every configuration key, tracing and the routes in detail, the scheduled collection, the reports and their columns, exit codes and logs, the migration from the original script, the internals and how to test a change, troubleshooting and the Graph calls. |
+| **[User guide](package/docs/MessageTraceReport-UserGuide.md)** | What you need before the first trace, the one-time setup step by step, then one command per everyday question: a sender, a domain, a list of addresses, a message ID, why a recipient did not get it, the daily collection, a report from the database. How to read the results and what to do when something goes wrong. |
+| **[Developer guide](package/docs/MessageTraceReport-Guide.md)** | Everything else: how the Graph API behaves and how the tool plans around it, performance figures, every configuration key, the routes in detail, the scheduled collection, the report columns, exit codes and logs, the migration from the original script, the internals and how to test a change. |
 
-Both guides also exist as a single HTML file with a light and a dark theme (`package/docs/MessageTraceReport-UserGuide.html`, `package/docs/MessageTraceReport-Guide.html`): download them and open them locally, or use the copies in the release zip.
+Both guides also exist as a single HTML file with a light and a dark theme, `docs\MessageTraceReport-UserGuide.html` and `docs\MessageTraceReport-Guide.html`, in the release ZIP.
 
-## Tests
+## For developers
 
 ```powershell
+git clone https://github.com/Nico77600/MessageTraceReport.git
+cd MessageTraceReport
 Invoke-Pester -Path .\tests          # Pester 5+, in-memory Graph API, no connection to Microsoft 365
 .\tests\New-DemoReport.ps1 -Open     # a report of fictitious Contoso data, through the real engine
+.\tools\New-MtrPackage.ps1 -Unsigned -Zip -Destination C:\Build\MessageTraceReport   # unsigned package folder and ZIP for tests
 ```
 
-`tools\Build-Documentation.ps1` rebuilds the HTML guides; `tools\New-ReadmeImages.ps1` renders the graphics of this page from the guide, in a light and a dark version.
+The run-time files are in `package\`. `tools\Build-Documentation.ps1` rebuilds the HTML guides; `tools\New-ReadmeImages.ps1` renders the graphics of this page.
 
 ## License
 

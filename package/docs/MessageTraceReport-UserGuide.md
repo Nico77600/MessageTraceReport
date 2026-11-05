@@ -1,23 +1,23 @@
 ---
 title: Message Trace Report
 subtitle: User guide
-version: 1.1.0
+version: 1.1.1
 author: Nicolas Fabert
-updated: 2026-10-08
+updated: 2026-11-05
 ---
 
 # Message Trace Report — User guide
 
-> What you need before the first trace, then one command per everyday question: **did this message leave, and who received it?**, **why was it not delivered?**, **every message of this list of people to that domain last month**, **what does the database already hold?** The Graph API itself, the planner, every setting and the internals are in the [developer guide](MessageTraceReport-Guide.md).
+> What you need before the first trace, then one command per everyday question: **did this message leave, and who received it?**, **why was it not delivered?**, **every message of this list of people to that domain last month**, **what does the database already hold?** How the tool works inside, every setting and the internals are in the [developer guide](MessageTraceReport-Guide.md).
 
 > [!IMPORTANT]
-> Files downloaded from the Internet may be blocked by Windows and fail to run. Before using this project, unblock every file in the downloaded folder:
+> Files downloaded from the Internet may be blocked by Windows and fail to run. Before using the tool, unblock every file in the folder where you extracted it (step 3 of chapter 2 shows how):
 >
 > ```powershell
-> Get-ChildItem "C:\Chemin\Du\Dossier" -Recurse -File -Force | Unblock-File
+> Get-ChildItem "C:\Tools\MessageTraceReport-1.1.1" -Recurse -File -Force | Unblock-File
 > ```
 >
-> Replace the example path with the folder where you downloaded or extracted this project.
+> Replace the example path with the folder where you extracted the release ZIP.
 
 ```cards
 checklist | Prerequisites | PowerShell 7.4+, an application with a certificate, one Microsoft Graph permission.
@@ -34,33 +34,188 @@ file | Results | CSV, optional JSON and a self-contained HTML report under `repo
 | Item | Requirement |
 |---|---|
 | Operating system | Windows 10 / 11 or Windows Server 2019 or later (x64 or ARM64) |
-| PowerShell | **7.4 or later** (`pwsh`). Windows PowerShell 5.1 is not supported. |
+| PowerShell | **7.4 or later** (the program is called `pwsh`). Windows PowerShell 5.1, the blue window that opens with `powershell`, is **not enough**. |
 | Console | Windows Terminal recommended (colours and emoji); the classic console works with simple symbols. |
-| Modules | **None** in Certificate and ClientSecret modes. Interactive mode: `Microsoft.Graph.Authentication` (for MSAL only). |
-| Permission | Microsoft Graph **`ExchangeMessageTrace.Read.All`** — application (certificate, secret) or delegated (interactive), with admin consent. |
-| Tenant | Service principal of the application `8bd644d1-64a1-4d4b-ae52-2e0cbf64e373`. Global service only (not GCC High, DoD, 21Vianet). |
-| Network | `https://login.microsoftonline.com` and `https://graph.microsoft.com` (system proxy used). |
-| SQLite | Bundled in `lib\sqlite` — nothing to install. |
+| Modules | **None** to run the tool with a certificate or a client secret. Interactive sign-in needs `Microsoft.Graph.Authentication`. |
+| Rights in Microsoft 365 | An account that can create an app registration and grant admin consent (for example Application Administrator and Global Administrator), only for the one-time setup. |
+| Tenant | Global Microsoft 365 service only (not GCC High, DoD or 21Vianet). |
+| Network | `https://login.microsoftonline.com` and `https://graph.microsoft.com` (the system proxy is used). |
+| SQLite | Bundled in `lib\sqlite`: nothing to install. |
+
+Words used in this guide:
+
+| Word | Plain meaning |
+|---|---|
+| Tenant | Your organization in Microsoft 365. Its tenant ID is a long identifier (a GUID). |
+| Unblock | Windows marks files downloaded from the Internet as blocked and may refuse to run them; `Unblock-File` removes that mark. |
+| Signed list | `PackageIntegrity.psd1`, a file that records the SHA256 of every other file of the release and carries the owner's signature; the tool compares your files with it at every start. |
+| SHA256 | A fingerprint of 64 characters computed from a file. Two files with the same SHA256 are identical; one changed byte gives another value. |
+| NTFS permissions | The Windows right to open, change or list a folder. They are set in the folder properties, tab Security. |
+| Microsoft Graph | The Microsoft web service that gives access to Microsoft 365 data, here the message trace. |
+| App registration | The identity you create for this tool in Microsoft Entra ID, so that it can sign in without a person. |
+| Admin consent | A click by an administrator that allows the app to use the permission. Without it the permission does nothing. |
+| Certificate and thumbprint | The tool proves who it is with a certificate kept on the computer. The thumbprint is the short code that identifies that certificate. |
+| Service principal | The entry that makes an application exist inside one tenant. The message trace service of Microsoft needs one in your tenant; step 8 of the setup creates it. |
+| SQLite database | A single file, `data\MessageTraceReport.sqlite`, where the tool keeps everything it has already read. |
 
 > [!IMPORTANT]
-> The tool is **read-only** for Microsoft 365: it only calls the message trace API, and changes nothing in the tenant. The database, the reports and the logs stay on the local disk.
+> The tool is **read-only** for Microsoft 365: it only asks for message traces and changes nothing in the tenant. The database, the reports and the logs stay on the local disk.
 
 > [!WARNING]
-> `data\`, `reports\` and `logs\` contain e-mail addresses and subjects. Restrict the NTFS permissions of the tool folder to the administrators who run it.
+> `data\`, `reports\` and `logs\` contain e-mail addresses and subjects. Restrict the permissions of the tool folder (properties, tab Security) to the administrators who run it.
 
 <!-- icon: download -->
 ## 2. One-time setup
 
-Everything you run is in the `package` folder of the repository, or in the folder where you extracted the zip of a [release](https://github.com/Nico77600/MessageTraceReport/releases). Work from that folder.
+Do the steps in order, in the same PowerShell 7 window, from step 2 on. Each step says what to do, what you should see, and what to do if not. The sample folder is `C:\Tools\MessageTraceReport-1.1.1`; use your own if you prefer.
 
-```steps
-Get the files | `git clone https://github.com/Nico77600/MessageTraceReport.git`, then `cd MessageTraceReport\package` — or extract the release zip, for example to `C:\Tools\MessageTraceReport`.
-Unblock the files | From that folder: `Get-ChildItem . -Recurse -File | Unblock-File`.
-Register the application | A certificate, an app registration with the application permission `ExchangeMessageTrace.Read.All` and admin consent, and the message trace service principal — the six steps are in the [developer guide, chapter 7](MessageTraceReport-Guide.md#7-application-registration).
-Fill in the configuration | `notepad .\config\MessageTraceReport.config.psd1`: `Tenant.TenantId`, `Authentication.AppId`, `Authentication.CertificateThumbprint`.
-Check without connecting | `.\Invoke-MessageTraceReport.ps1 -Mode Status` checks the configuration and compiles the engine (a few seconds, once).
-First trace | `.\Invoke-MessageTraceReport.ps1 -Sender john@contoso.com -Range Last7Days -Open`.
+> [!NOTE]
+> Keep your own files (address lists, the certificate file) **outside** the tool folder, for example in `C:\Tools\MessageTraceReport-data`. The tool checks its own folder at every start and refuses a folder that holds a file it does not know. Reports, the database and logs are written to their own sub-folders, which are not checked.
+
+### 1 · Get the files
+
+**Do:** extract `MessageTraceReport-1.1.1.zip` to `C:\Tools`. The ZIP holds one folder, `MessageTraceReport-1.1.1`.
+
+**You should see:** `C:\Tools\MessageTraceReport-1.1.1` with `Invoke-MessageTraceReport.ps1`, `README.md` and the folders `config`, `docs`, `lib`, `src` and `templates`.
+
+**If not:** if the files are directly in `C:\Tools`, move them into a folder named `MessageTraceReport-1.1.1`.
+
+### Check the download (after step 1)
+
+The release is a ZIP, `MessageTraceReport-1.1.1.zip`, on the [Releases page](https://github.com/Nico77600/MessageTraceReport/releases/latest). Use that file, not the *Source code* archives. Its PowerShell files carry the owner's timestamped digital signature, and a signed list (`PackageIntegrity.psd1`) records the fingerprint of every other file.
+
+**Do:** once the ZIP is extracted (step 1), compare its fingerprint with the `SHA256` line of the release notes, and read the signature of the entry script:
+
+```powershell
+(Get-FileHash "$HOME\Downloads\MessageTraceReport-1.1.1.zip" -Algorithm SHA256).Hash -eq '<SHA256 from the release notes>'
+Get-AuthenticodeSignature C:\Tools\MessageTraceReport-1.1.1\Invoke-MessageTraceReport.ps1 | Format-List Status, SignerCertificate
 ```
+
+**You should see:** `True` (the fingerprint equals the one of the release notes), then `Status : Valid` and a signer named *Nicolas Fabert*.
+
+**If not:** download the ZIP again from the Releases page and extract it again. At every start the tool refuses a modified, re-saved or unsigned file with a message that starts with `Package integrity:` and does nothing else. If the message names a file that you added to the tool folder (a list, a certificate, a copy of the configuration), move it out, for example to `C:\Tools\MessageTraceReport-data\`; a file of the release that is changed or missing means a damaged or altered download, and the cure is a fresh download.
+
+### 2 · Open PowerShell 7 in that folder
+
+**Do:** in File Explorer, open `C:\Tools\MessageTraceReport-1.1.1`, click the address bar, type `pwsh` and press Enter. Then run:
+
+```powershell
+$PSVersionTable.PSVersion
+Get-Location
+```
+
+**You should see:** a version that starts with 7 (7.4 or later) and the path `C:\Tools\MessageTraceReport-1.1.1`.
+
+**If not:** if `pwsh` is not recognized, PowerShell 7 is not installed (or the window was opened before the installation): install it from Microsoft, then open a new window. If the version starts with 5, you opened Windows PowerShell, which is not enough: use `pwsh`.
+
+### 3 · Unblock the files
+
+**Do:**
+
+```powershell
+Get-ChildItem . -Recurse -File -Force | Unblock-File
+```
+
+**You should see:** no output and no error.
+
+**If not:** *access denied*: close programs that use the folder and run the window as the same user who extracted the ZIP.
+
+### 4 · Create the certificate
+
+**Do:** on the computer, and for the account that will run the tool, create a certificate and save its public part. Keep `$cert` for the next steps:
+
+```powershell
+$cert = New-SelfSignedCertificate -Subject 'CN=MessageTraceReport' -CertStoreLocation Cert:\CurrentUser\My -KeyExportPolicy NonExportable -KeySpec Signature -KeyAlgorithm RSA -KeyLength 2048 -HashAlgorithm SHA256 -NotAfter (Get-Date).AddYears(2)
+New-Item -ItemType Directory -Force C:\Tools\MessageTraceReport-data | Out-Null
+Export-Certificate -Cert $cert -FilePath C:\Tools\MessageTraceReport-data\MessageTraceReport.cer | Out-Null
+$cert.Thumbprint
+```
+
+**You should see:** a code of 40 characters (the thumbprint). Copy it: you need it in step 9.
+
+**If not:** if `$cert` is empty, run the first command again and read its error. For a scheduled task under a service account, use `Cert:\LocalMachine\My` instead and give that account read access to the private key.
+
+### 5 · Register the application in Microsoft Entra
+
+**Do:** sign in to the [Microsoft Entra admin center](https://entra.microsoft.com) as an administrator.
+
+1. Go to **Entra ID > App registrations > New registration**.
+2. Name: `MessageTraceReport`. Supported account types: **Accounts in this organizational directory only**. Leave the redirect URI empty. Click **Register**.
+3. On the **Overview** page, copy **Application (client) ID** and **Directory (tenant) ID**.
+
+**You should see:** the new application and its two identifiers.
+
+**If not:** if *New registration* is greyed out, your account may not create applications; ask a Global Administrator or an Application Administrator.
+
+### 6 · Upload the certificate
+
+**Do:** in the application, open **Certificates & secrets > Certificates > Upload certificate**, choose `C:\Tools\MessageTraceReport-data\MessageTraceReport.cer` and click **Add**.
+
+**You should see:** the certificate in the list, with a thumbprint equal to the one of step 4.
+
+**If not:** if the thumbprints differ, you uploaded another file; upload the `.cer` of step 4.
+
+### 7 · Add the permission and grant admin consent
+
+**Do:** open **API permissions > Add a permission > Microsoft Graph > Application permissions**, search `ExchangeMessageTrace.Read.All`, tick it and click **Add permissions**. Then click **Grant admin consent for your organization** and confirm.
+
+**You should see:** `ExchangeMessageTrace.Read.All` of type *Application*, with a green check and *Granted for ...* in the **Status** column.
+
+**If not:** if the permission is not in the list, search again with the exact name. If the consent button is greyed out, ask a Global Administrator to click it.
+
+### 8 · Create the service principal of the message trace service
+
+Microsoft runs the message trace service as its own application. It must have an entry (a service principal) in your tenant, once. It shows up as *Transport Data Platform*.
+
+**Do:** with an Application Administrator account:
+
+```powershell
+Install-Module Microsoft.Graph.Applications -Scope CurrentUser
+Connect-MgGraph -Scopes Application.ReadWrite.All
+New-MgServicePrincipal -AppId 8bd644d1-64a1-4d4b-ae52-2e0cbf64e373
+```
+
+**You should see:** a sign-in window, then a table with the new service principal.
+
+**If not:** `Install-Module` may ask whether to trust the PSGallery repository: answer `Y` (or add `-Repository PSGallery -Force`). If the message says the service principal already exists, nothing is left to do. After the creation, Microsoft can take up to several hours to provision it: until then the first trace answers `401`, and chapter 8 explains it.
+
+### 9 · Fill in the configuration
+
+**Do:**
+
+```powershell
+notepad .\config\MessageTraceReport.config.psd1
+```
+
+Fill in `Tenant.TenantId` (the Directory ID of step 5), `Authentication.AppId` (the Application ID) and `Authentication.CertificateThumbprint` (step 4). Save the file.
+
+**You should see:** the three values between quotes, for example `TenantId = '00000000-0000-0000-0000-000000000000'`.
+
+**If not:** the tool lists every wrong value at the next start; fix them and run the next step again.
+
+### 10 · Check without connecting
+
+**Do:**
+
+```powershell
+.\Invoke-MessageTraceReport.ps1 -Mode Status
+```
+
+**You should see:** the banner with your tenant, then *No database yet*, and no red error. Nothing is sent to Microsoft in this step.
+
+**If not:** a message starting with `Package integrity:` means a file of the folder differs from the signed release (see *Check the download*). A message about the configuration names the wrong value.
+
+### 11 · First trace
+
+**Do:** one sender over the last 7 days, and the report opened at the end:
+
+```powershell
+.\Invoke-MessageTraceReport.ps1 -Sender john@contoso.com -Range Last7Days -Open
+```
+
+**You should see:** the plan, a live progress line, the list of files written under `reports\`, and the HTML report opening in your browser.
+
+**If not:** `401` or `403` means the service principal (step 8) or the admin consent (step 7) is not in place yet; the table of chapter 8 gives the exact message and the cure.
 
 The settings you fill in once:
 
@@ -73,7 +228,7 @@ The settings you fill in once:
 | `Report.TimeZone` | Dates and days of the reports (`Europe/Paris` by default). |
 | `Report.DefaultRange` | Period used when none is given (`Last48Hours`). |
 
-The tool creates, next to itself: `data\` (the SQLite database), `reports\` (one sub-folder per run), `logs\` (one file per day) and `bin\` (the engine, compiled on first use). The developer guide covers client secrets, interactive sign-in and every other key.
+The tool creates, next to itself: `data\` (the SQLite database), `reports\` (one sub-folder per run) and `logs\` (one file per day). The developer guide covers client secrets, interactive sign-in and every other key.
 
 # Part II · Everyday use
 
@@ -90,7 +245,7 @@ Run the commands from that same folder, in PowerShell 7. `-Mode Trace` is the de
 .\Invoke-MessageTraceReport.ps1 -Recipient *@fabrikam.com -Status Failed -Range Last7Days -Open
 
 # A list of VIPs (CSV, column detected) to Gmail in September
-.\Invoke-MessageTraceReport.ps1 -SenderFile .\vip.csv -Recipient *@gmail.com -Start 2026-09-01 -End 2026-10-01
+.\Invoke-MessageTraceReport.ps1 -SenderFile C:\Tools\MessageTraceReport-data\vip.csv -Recipient *@gmail.com -Start 2026-09-01 -End 2026-10-01
 
 # From OR to these addresses, with the route of the failed deliveries
 .\Invoke-MessageTraceReport.ps1 -Sender alerts@contoso.com -Recipient helpdesk@contoso.com -Operator Or -IncludeDetails
@@ -117,7 +272,7 @@ Run the commands from that same folder, in PowerShell 7. `-Mode Trace` is the de
 | The messages in a grid, the report opened | `-GridView`, `-Open` |
 | To read the whole period again | `-Refresh` |
 
-Before collecting, the tool prints its **plan**: the filter, which list is sent to Graph and which is applied locally, what the database already holds, and the number of windows left to read. A plan above `Collection.MaxQueries` (2,000 requests) stops unless `-Force` is given. Running the same trace again only reads the last `Collection.SettlingHours` (4 h):
+Before collecting, the tool prints its **plan**: your filter, what the database already holds and how much is left to ask Microsoft. A plan of more than 2,000 requests (`Collection.MaxQueries`) stops unless `-Force` is given. Running the same trace again only reads the last `Collection.SettlingHours` (4 h):
 
 ![The same trace again](images/console-rerun.png)
 
@@ -149,10 +304,12 @@ The full list of causes and how each one is decided: [developer guide, chapter 9
 `-Mode Collect` reads the last `Collect.Days` days of the whole tenant — or of the scope set in the `Collect` section — into the database: only what is missing and the last hours. Run every day, it keeps the history **beyond the 90 days of Graph**, and every trace of that period is then answered from the database.
 
 ```powershell
-$action  = New-ScheduledTaskAction -Execute 'pwsh.exe' -Argument '-NoProfile -File "C:\Tools\MessageTraceReport\Invoke-MessageTraceReport.ps1" -Mode Collect' -WorkingDirectory 'C:\Tools\MessageTraceReport'
+$action  = New-ScheduledTaskAction -Execute 'pwsh.exe' -Argument '-NoProfile -File "C:\Tools\MessageTraceReport-1.1.1\Invoke-MessageTraceReport.ps1" -Mode Collect' -WorkingDirectory 'C:\Tools\MessageTraceReport-1.1.1'
 $trigger = New-ScheduledTaskTrigger -Daily -At 02:30
 Register-ScheduledTask -TaskName 'Message Trace Report - Collect' -Action $action -Trigger $trigger -User 'CONTOSO\svc-mtr' -Password (Read-Host 'Password') -RunLevel Limited
 ```
+
+If you scope the collection with `Collect.SenderFile` or `Collect.RecipientFile`, give absolute paths in the data folder, for example `C:\Tools\MessageTraceReport-data\vip.csv`: a relative path would point inside the tool folder, which the tool refuses to start with when it holds your files.
 
 The account of the task must hold the certificate (in its `Cert:\CurrentUser\My`, or `Cert:\LocalMachine\My` with read access to the private key). A first collection of 10 days is ten times longer than a daily one: run it once by hand with `Collect.Days = 10`.
 
@@ -201,7 +358,10 @@ The daily log is `logs\MessageTraceReport_<yyyyMMdd>.log`: one line per event, t
 
 | Symptom | Cause | What to do |
 |---|---|---|
-| `401 … Service principal-less authentication failed … 8bd644d1-…` | The *Transport Data Platform* service principal is missing, or not provisioned yet | Create it (developer guide, chapter 7, step 5), then wait — up to several hours. |
+| `Configuration file not found: <path>` | `-ConfigPath` or the default `config\MessageTraceReport.config.psd1` does not exist | Check the path (use an absolute path in the data folder for your own copy), or restore the file from the ZIP. |
+| `Invalid configuration ... <key> is required` | A value of the configuration file is empty or wrong, for example `Tenant.TenantId` | Fill in the listed keys (chapter 2, step 9). The message lists every wrong value. |
+| `Package integrity: ...` at start | A file of the release is changed, missing or unsigned (`SHA256 mismatch`, `missing inventory path`, `owner signature`), or your own file is in the tool folder (`unexpected stable file: <name>`) | Changed, missing or unsigned: download the ZIP again from the [Releases page](https://github.com/Nico77600/MessageTraceReport/releases/latest), extract it again and unblock it. Unexpected file: move it out of the tool folder, for example to `C:\Tools\MessageTraceReport-data\`. |
+| `401 … Service principal-less authentication failed … 8bd644d1-…` | The *Transport Data Platform* service principal is missing, or not provisioned yet | Create it (chapter 2, step 8), then wait — up to several hours. |
 | `The application has no application permission ExchangeMessageTrace.Read.All` | Permission not added, or admin consent not granted | Add it and grant admin consent; a new consent can take a few minutes to reach the token. |
 | `403 Permission denied` | Same as above, or the delegated account has no right on message trace | Check the permission and the role of the account. |
 | `AADSTS700027` · `AADSTS7000222` · `AADSTS700024` | Certificate not on the application, or another thumbprint · the client secret has expired · the clock of the computer is wrong | Upload the right `.cer` · move to a certificate · fix the time of the computer. |

@@ -2,7 +2,7 @@
 //  Message Trace Report - engine, part 6: message route
 // -----------------------------------------------------------------------------
 //  Author  : Nicolas Fabert
-//  Version : 1.1.0
+//  Version : 1.1.1
 //
 //  getDetailsByRecipient returns the events of one message for one recipient (Receive,
 //  Submit, Deliver, Fail, Defer, Drop, Expand DL, DLP rule, Spam ...), each with a

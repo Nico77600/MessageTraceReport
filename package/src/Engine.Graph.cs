@@ -2,7 +2,7 @@
 //  Message Trace Report - engine, part 3: Microsoft Graph collection
 // -----------------------------------------------------------------------------
 //  Author  : Nicolas Fabert
-//  Version : 1.1.0
+//  Version : 1.1.1
 //
 //  Throughput is bounded by Microsoft, not by the tool: 100 requests per 5 minutes and
 //  per tenant (rolling window), 5,000 rows per request. A page of 5,000 rows takes
@@ -181,7 +181,7 @@ namespace MessageTraceReport
         public int MaxThrottleRetries = 20;     // 429
         public int TimeoutSeconds = 180;
         public int DefaultRetryAfterSeconds = 30;
-        public string UserAgent = "MessageTraceReport/1.1.0";
+        public string UserAgent = "MessageTraceReport/1.1.1";
         public HttpMessageHandler Handler;      // tests: a fake Graph
     }
 

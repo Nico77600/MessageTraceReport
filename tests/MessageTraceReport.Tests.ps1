@@ -3,7 +3,7 @@
 <#
     Message Trace Report - automated tests (Pester 5 or later).
     Author  : Nicolas Fabert
-    Version : 1.1.0
+    Version : 1.1.1
 
     Run:  Invoke-Pester -Path .\tests -Output Detailed
 
@@ -729,19 +729,19 @@ Describe 'Entry script without connection' {
         $script:Entry = Join-Path $script:Root 'Invoke-MessageTraceReport.ps1'
     }
     It 'builds a report from the database only (-Mode Report, pattern)' {
-        $out = pwsh -NoProfile -File $script:Entry -Mode Report -ConfigPath $script:S4.Path -Sender 'sales-*@contoso.com' -Range Last24Hours -Format Csv 2>&1
+        $out = pwsh -NoProfile -File $script:Entry -DevelopmentMode -Mode Report -ConfigPath $script:S4.Path -Sender 'sales-*@contoso.com' -Range Last24Hours -Format Csv 2>&1
         $LASTEXITCODE | Should -BeIn 0, 2 -Because ($out -join "`n")
         ($out -join "`n") | Should -Match '2[0-4] messages'
         ($out -join "`n") | Should -Match 'not used \(database only\)'
     }
     It 'shows the database status (-Mode Status)' {
-        $out = pwsh -NoProfile -File $script:Entry -Mode Status -ConfigPath $script:S4.Path 2>&1
+        $out = pwsh -NoProfile -File $script:Entry -DevelopmentMode -Mode Status -ConfigPath $script:S4.Path 2>&1
         $LASTEXITCODE | Should -Be 0
         ($out -join "`n") | Should -Match '20 messages'
         ($out -join "`n") | Should -Match 'Last runs'
     }
     It 'fails with exit code 1 and a clear message on an invalid filter' {
-        $out = pwsh -NoProfile -File $script:Entry -ConfigPath $script:S4.Path -Sender 'not-an-address' 2>&1
+        $out = pwsh -NoProfile -File $script:Entry -DevelopmentMode -ConfigPath $script:S4.Path -Sender 'not-an-address' 2>&1
         $LASTEXITCODE | Should -Be 1
         ($out -join "`n") | Should -Match 'not valid'
     }

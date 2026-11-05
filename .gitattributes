@@ -1,2 +1,32 @@
 # Language statistics: the guides are documentation, not code.
 package/docs/** linguist-documentation
+
+# Files signed by the owner: byte-exact, CRLF in the working tree and in the index.
+package/**/*.ps1 -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+package/**/*.psm1 -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+package/MessageTraceReport.psd1 -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+package/PackageIntegrity.psd1 -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+
+# Every other file hashed in the signed PackageIntegrity.psd1 manifest: exact bytes on every checkout (CRLF in text files).
+package/src/Engine.*.cs -text
+package/lib/sqlite/Microsoft.Data.Sqlite.dll -text
+package/lib/sqlite/SQLitePCLRaw.core.dll -text
+package/lib/sqlite/SQLitePCLRaw.provider.e_sqlite3.dll -text
+package/lib/sqlite/SQLitePCLRaw.batteries_v2.dll -text
+package/lib/sqlite/runtimes/win-x64/e_sqlite3.dll -text
+package/lib/sqlite/runtimes/win-arm64/e_sqlite3.dll -text
+package/templates/Report.template.html -text
+package/docs/MessageTraceReport-Guide.html -text
+package/docs/MessageTraceReport-UserGuide.html -text
+package/README.md -text
+package/LICENSE -text
+package/THIRD-PARTY-NOTICES.md -text
+CHANGELOG.md -text
+
+# Source archive (git archive, Download ZIP): development paths are left out. The release ZIP is the file to use.
+/tests/ export-ignore
+/tools/ export-ignore
+/.github/ export-ignore
+/AGENTS.md export-ignore
+/package/docs/*.md export-ignore
+/package/docs/images/ export-ignore
