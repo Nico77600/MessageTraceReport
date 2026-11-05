@@ -1,9 +1,9 @@
 ---
 title: Message Trace Report
 subtitle: Developer guide
-version: 1.1.0
+version: 1.1.1
 author: Nicolas Fabert
-updated: 2026-10-08
+updated: 2026-11-05
 ---
 
 # Message Trace Report — Developer guide
@@ -14,7 +14,7 @@ updated: 2026-10-08
 > Files downloaded from the Internet may be blocked by Windows and fail to run. Before using this project, unblock every file in the downloaded folder:
 >
 > ```powershell
-> Get-ChildItem "C:\Chemin\Du\Dossier" -Recurse -File -Force | Unblock-File
+> Get-ChildItem "C:\Tools\MessageTraceReport-1.1.1" -Recurse -File -Force | Unblock-File
 > ```
 >
 > Replace the example path with the folder where you downloaded or extracted this project.
@@ -145,7 +145,7 @@ A page of 5,000 rows takes 2 to 4 seconds (about 2 MB). Two or three concurrent 
 3. Edit `config\MessageTraceReport.config.psd1` (chapter 8).
 4. Check the configuration without connecting: `.\Invoke-MessageTraceReport.ps1 -Mode Status`.
 
-The tool creates, next to itself: `data\` (the SQLite database), `reports\` (one sub-folder per run), `logs\` (one file per day) and `bin\` (the engine, compiled from `src\Engine.*.cs` on first use and again only when a source file changes).
+The tool creates, next to itself: `data\` (the SQLite database), `reports\` (one sub-folder per run), `logs\` (one file per day). The engine is compiled in memory from `src\Engine.*.cs` at every start, after the integrity check; no compiled file is written or loaded.
 
 > [!WARNING]
 > `data\`, `reports\` and `logs\` contain e-mail addresses and subjects. Restrict the NTFS permissions of the tool folder to the administrators who run it.
@@ -396,7 +396,7 @@ Logs: `logs\MessageTraceReport_<yyyyMMdd>.log`, one line per event, every 60 sec
 | `MessageTraceReport.psm1` / `.psd1` | Module: loads `src\*.ps1` |
 | `src\Console.ps1` | Banner, steps, items, live progress line, tables, summary card, log |
 | `src\Configuration.ps1` | `Import-MtrConfiguration`: defaults, checks, absolute paths |
-| `src\Engine.ps1` | Loads SQLite and compiles the C# engine into `bin\` |
+| `src\Engine.ps1` | Checks the package integrity, loads SQLite and compiles the C# engine in memory |
 | `src\Filter.ps1` | Periods, address files, filter checks, query plan, work plan |
 | `src\Connection.ps1` | Token: certificate (client assertion), secret, interactive (MSAL); checks tenant and permission; renewal |
 | `src\Collection.ps1` | Runs the engine with the progress loop, prints its events, Ctrl+C |
@@ -425,8 +425,32 @@ Invoke-Pester -Path .\tests -Output Detailed      # Pester 5+, no connection to 
 .\tests\New-DemoReport.ps1 -Open                  # a report of fictitious Contoso data
 ```
 
-The tests use `tests\FakeGraph.cs`, an in-memory message trace API that behaves like the real one (one value per property, newest first, paging, 10 days, 90 days) and fails on demand (429 with Retry-After, 401, 500, 403, missing service principal). They cover the configuration, the periods, the filter, the planner and the coverage reuse, the limiter, the collection with its failures and its interruption, the report files and the entry script.
+The tests use `tests\FakeGraph.cs`, an in-memory message trace API that behaves like the real one (one value per property, newest first, paging, 10 days, 90 days) and fails on demand (429 with Retry-After, 401, 500, 403, missing service principal). They cover the package integrity check, the configuration, the periods, the filter, the planner and the coverage reuse, the limiter, the collection with its failures and its interruption, the report files and the entry script.
 
+<!-- icon: shield -->
+## 17. Signing and verifying a release
+
+A release carries three layers of protection, all tied to the owner's code-signing certificate (thumbprint `0F28E442889F17B5F4D251E8F96E7CC6E2C9C6D6`).
+
+- **Signed PowerShell files.** `Invoke-MessageTraceReport.ps1`, `MessageTraceReport.psm1`, `MessageTraceReport.psd1` and every `src\*.ps1` (including `src\Test-PackageIntegrity.ps1`) carry a timestamped Authenticode signature (RFC 3161). The editable `config\MessageTraceReport.config.psd1` is not signed.
+- **Signed manifest.** `PackageIntegrity.psd1` lists the SHA256 of every other shipped file: the C# sources, the SQLite libraries, the report template, the HTML guides, `README.md`, `LICENSE`, `THIRD-PARTY-NOTICES.md` and `CHANGELOG.md`. The manifest itself is signed.
+- **Verification at start.** `Invoke-MessageTraceReport.ps1` and the module (on import and before the engine is compiled) call `src\Test-PackageIntegrity.ps1`, after checking that it carries the owner signature. It refuses a bad manifest signature or timestamp, another signer, a changed or missing file, an unknown file and a reparse point (junction or symbolic link). `bin\`, `data\`, `logs\` and `reports\` are not examined. The C# engine is compiled in memory from the verified sources.
+
+A tree without a manifest (a repository clone, a CI build) is accepted only with `-DevelopmentMode`; a present manifest is always verified.
+
+Build and sign, from the repository (the signing itself is done with the owner's key, never by the scripts):
+
+```powershell
+# 1. Sign the PowerShell files of package\ (RFC 3161 timestamp), then build the folder
+.\tools\New-MtrPackage.ps1 -Destination C:\Release\MessageTraceReport-1.1.1
+# 2. Hash the built folder: writes the unsigned PackageIntegrity.psd1 in it
+.\tools\New-MtrPackage.ps1 -Manifest C:\Release\MessageTraceReport-1.1.1
+# 3. Sign that manifest, copy it to package\PackageIntegrity.psd1 and commit it
+# 4. Verify, compare every protected byte with package\, write MessageTraceReport-1.1.1.zip (single root folder) and print its SHA256
+.\tools\New-MtrPackage.ps1 -Seal C:\Release\MessageTraceReport-1.1.1
+```
+
+The build refuses unsigned scripts unless `-Unsigned` is given (CI). `-Zip` with `-Unsigned` writes an `-unsigned-ci` ZIP that is never a release. The tests of the verifier are in `tests\PackageIntegrity.Tests.ps1`; the cases tagged `RealSignature` need the signed files, and the one that checks a sealed package reads its folder from the environment variable `MTR_RELEASE_PACKAGE`.
 # Annexes
 
 <!-- icon: lifebuoy -->
@@ -434,7 +458,7 @@ The tests use `tests\FakeGraph.cs`, an in-memory message trace API that behaves 
 
 | Symptom | Cause and fix |
 |---|---|
-| `401 … Service principal-less authentication failed … 8bd644d1-…` | The *Transport Data Platform* service principal is missing, or provisioning is not finished (up to several hours). Chapter 7, step 5. |
+| `401 … Service principal-less authentication failed … 8bd644d1-…` | The *Transport Data Platform* service principal is missing, or provisioning is not finished (up to several hours). The user guide, chapter 2, step 8. |
 | `The application has no application permission ExchangeMessageTrace.Read.All` | Permission not added or admin consent not granted. A new consent can take a few minutes to reach the token. |
 | `403 Permission denied` | Same as above, or the delegated account has no right on message trace. |
 | `AADSTS700027` | The certificate is not on the application, or another thumbprint. |

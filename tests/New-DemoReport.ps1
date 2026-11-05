@@ -21,7 +21,7 @@
 
 .NOTES
     Author  : Nicolas Fabert
-    Version : 1.1.0
+    Version : 1.1.1
 #>
 [CmdletBinding()]
 param([string]$OutputPath, [int]$Messages = 2400, [switch]$Open)
@@ -103,7 +103,7 @@ try {
     $workPlan = Get-MtrWorkPlan -Store $store -QueryPlan $plan -Period $period -Settings $settings
     $options = [MessageTraceReport.CollectorOptions]::new(); $options.Handler = $g; $options.MaxConcurrency = 3
     $connection = [ordered]@{ Mode = 'Certificate'; Account = 'demo'; Token = 'demo'; ExpiresMs = $now.AddHours(1).ToUnixTimeMilliseconds(); Renew = { @{ Token = 'demo'; ExpiresMs = [DateTimeOffset]::UtcNow.AddHours(1).ToUnixTimeMilliseconds() } } }
-    $run = $store.StartRun('Trace', 'demo', 'demo', '1.1.0', 'demo')
+    $run = $store.StartRun('Trace', 'demo', 'demo', '1.1.1', 'demo')
     $collect = Invoke-MtrCollection -Store $store -Settings $settings -Connection $connection -WorkPlan $workPlan -RunId $run -Options $options 6>$null
     $selection = Select-MtrMessages -Store $store -Filter $filter -Period $period
     $details = Invoke-MtrDetails -Store $store -Settings $settings -Connection $connection -Items ($store.GetDetailCandidates(90, $true, $true)) -Options $options 6>$null

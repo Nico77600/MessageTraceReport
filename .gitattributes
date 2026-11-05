@@ -1,2 +1,17 @@
 # Language statistics: the guides are documentation, not code.
 package/docs/** linguist-documentation
+
+# Files signed by the owner: byte-exact, CRLF in the working tree and in the index.
+package/**/*.ps1 -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+package/**/*.psm1 -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+package/MessageTraceReport.psd1 -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+package/PackageIntegrity.psd1 -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+
+# Source archive (git archive, Download ZIP): development paths are left out. The release ZIP is the file to use.
+/tests/ export-ignore
+/tools/ export-ignore
+/.github/ export-ignore
+/Run-Tests.ps1 export-ignore
+/AGENTS.md export-ignore
+/package/docs/*.md export-ignore
+/package/docs/images/ export-ignore

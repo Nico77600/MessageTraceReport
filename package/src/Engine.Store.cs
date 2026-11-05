@@ -2,7 +2,7 @@
 //  Message Trace Report - engine, part 4: SQLite store
 // -----------------------------------------------------------------------------
 //  Author  : Nicolas Fabert
-//  Version : 1.1.0
+//  Version : 1.1.1
 //
 //  Tables (times in Unix ms, UTC)
 //    run           one row per execution

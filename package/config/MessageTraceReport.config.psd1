@@ -2,7 +2,7 @@
 #  Message Trace Report - configuration file
 #  --------------------------------------------------------------------------
 #  Author  : Nicolas Fabert
-#  Version : 1.1.0
+#  Version : 1.1.1
 #
 #  Read by Invoke-MessageTraceReport.ps1. It is a PowerShell data file: text between quotes,
 #  $true / $false, numbers, @( ) for lists and @{ } for groups of settings. Lines starting with #

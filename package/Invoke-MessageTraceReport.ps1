@@ -108,6 +108,9 @@
 .PARAMETER Force
     Runs a plan above Collection.MaxQueries queries.
 
+.PARAMETER DevelopmentMode
+    Allows a developer or CI copy that has no PackageIntegrity.psd1 manifest. A present manifest is always verified.
+
 .PARAMETER ConfigPath
     Configuration file. Default: config\MessageTraceReport.config.psd1 next to this script.
 
@@ -146,7 +149,7 @@
 
 .NOTES
     Author  : Nicolas Fabert
-    Version : 1.1.0
+    Version : 1.1.1
     Exit codes : 0 = success, 1 = failure, 2 = finished but incomplete (see the summary).
     Documentation : docs\MessageTraceReport-Guide.md (or .html)
 
@@ -189,6 +192,7 @@ param(
     [switch]$Open,
     [switch]$Refresh,
     [switch]$Force,
+    [switch]$DevelopmentMode,
     [string]$ConfigPath = (Join-Path $PSScriptRoot 'config\MessageTraceReport.config.psd1')
 )
 
@@ -206,6 +210,33 @@ $collect = $null; $workPlan = $null; $queryPlan = $null
 try {
     # do { } while ($false): 'break' ends the execution early; the finally block always runs.
     do {
+        # The package is verified before any of its code runs: the verifier must carry the owner signature, then it
+        # checks the signed manifest. A tree without a manifest is accepted only with -DevelopmentMode.
+        $integrityManifest = Join-Path $PSScriptRoot 'PackageIntegrity.psd1'
+        if (Microsoft.PowerShell.Management\Test-Path -LiteralPath $integrityManifest) {
+            $integrityVerifier = Join-Path $PSScriptRoot 'src\Test-PackageIntegrity.ps1'
+            $integrityCursor = [IO.Path]::GetFullPath($integrityVerifier)
+            while ($integrityCursor) {
+                $integrityItem = Microsoft.PowerShell.Management\Get-Item -LiteralPath $integrityCursor -Force -ErrorAction Stop
+                if ($integrityItem.Attributes -band [IO.FileAttributes]::ReparsePoint) {
+                    throw "Package integrity: reparse point: $integrityCursor"
+                }
+                $integrityCursor = [IO.Path]::GetDirectoryName($integrityCursor)
+            }
+            $integritySignature = Microsoft.PowerShell.Security\Get-AuthenticodeSignature -LiteralPath $integrityVerifier -ErrorAction Stop
+            if ([string]$integritySignature.Status -cne 'Valid' -or $null -eq $integritySignature.SignerCertificate -or
+                $integritySignature.SignerCertificate.Thumbprint -cne '0F28E442889F17B5F4D251E8F96E7CC6E2C9C6D6' -or
+                $null -eq $integritySignature.TimeStamperCertificate) {
+                throw 'Package integrity: the verifier must have the trusted, timestamped owner signature. Download the release ZIP again from https://github.com/Nico77600/MessageTraceReport/releases/latest, extract it and unblock it. A developer or CI copy is started from its folder with -DevelopmentMode.'
+            }
+            if ($DevelopmentMode) { & $integrityVerifier -Root $PSScriptRoot -DevelopmentMode | Out-Null } else { & $integrityVerifier -Root $PSScriptRoot -Distribution | Out-Null }
+        } elseif (-not $DevelopmentMode) {
+            throw 'Package integrity: PackageIntegrity.psd1 is missing. Download the release ZIP again from https://github.com/Nico77600/MessageTraceReport/releases/latest, extract it and unblock it. A developer or CI copy is started from its folder with -DevelopmentMode.'
+        } else {
+            Write-Warning 'DevelopmentMode: no package manifest; package byte integrity and publisher authentication are not established.'
+            # The module does not repeat this warning in the same process.
+            [AppDomain]::CurrentDomain.SetData('MessageTraceReport.UnverifiedTreeWarned', $true)
+        }
         Import-Module (Join-Path $PSScriptRoot 'MessageTraceReport.psd1') -Force
         $settings = Import-MtrConfiguration -Path $ConfigPath -Root $PSScriptRoot
         if ($OutputPath) { $settings.Report.OutputPath = [IO.Path]::GetFullPath($OutputPath, (Get-Location).Path) }

@@ -8,7 +8,7 @@
 #
 @{
     RootModule        = 'MessageTraceReport.psm1'
-    ModuleVersion     = '1.1.0'
+    ModuleVersion     = '1.1.1'
     GUID              = '6c1f3b2a-8d4e-4f7a-9b5c-2e7d1a0f4c83'
     Author            = 'Nicolas Fabert'
     Description       = 'Message Trace Report: Exchange Online message trace through the Microsoft Graph API (v1.0), with a local SQLite history, a query planner that respects the API quota, and CSV / JSON / HTML reports.'

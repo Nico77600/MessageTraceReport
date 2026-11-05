@@ -3,7 +3,8 @@
   "testMode": "pester",
   "testEntry": null,
   "tests": [
-    "tests/MessageTraceReport.Tests.ps1"
+    "tests/MessageTraceReport.Tests.ps1",
+    "tests/PackageIntegrity.Tests.ps1"
   ],
   "packageBuilder": "tools/New-MtrPackage.ps1",
   "packageEntry": "Invoke-MessageTraceReport.ps1"
