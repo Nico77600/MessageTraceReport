@@ -1,0 +1,7 @@
+Message Trace Report: this archive is the source code, not the tool.
+
+To use Message Trace Report, download the release ZIP, signed by the owner, from:
+
+    https://github.com/Nico77600/MessageTraceReport/releases/latest
+
+On that page, under Assets, download MessageTraceReport-<version>.zip, not the Source code archives.
